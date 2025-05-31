@@ -118,6 +118,12 @@
             border-color: var(--primary-color);
         }
 
+        .character-header.expanded {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
         .version-list {
             padding-left: 16px;
             margin-top: 4px;
@@ -419,17 +425,23 @@
             resize: vertical;
         }
 
-        /* 頭像上傳 */
-        .avatar-upload {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            margin-bottom: 20px;
+        /* 角色圖片和資訊區域 */
+        .character-info-section {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+            align-items: start;
         }
 
-        .avatar-preview {
-            width: 80px;
-            height: 80px;
+        .avatar-container {
+            width: 200px;
+            position: relative;
+        }
+
+        .avatar-display {
+            width: 100%;
+            aspect-ratio: 2/3;
             border-radius: 8px;
             border: 1px solid var(--border-color);
             object-fit: cover;
@@ -438,8 +450,52 @@
             align-items: center;
             justify-content: center;
             color: var(--text-muted);
-            font-size: 0.75em;
+            font-size: 0.9em;
             text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .avatar-upload-overlay {
+            position: absolute;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+
+        .character-meta-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .meta-field-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .meta-field-label {
+            font-size: 0.85em;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .meta-field-input {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.85em;
+            font-family: "Noto Serif CJK JP", 'Georgia', serif;
+            transition: all 0.2s ease;
+            background: var(--surface-color);
+            color: var(--text-color);
+        }
+
+        .meta-field-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 2px rgba(45, 55, 72, 0.1);
         }
 
         .file-input {
@@ -747,7 +803,6 @@
         <div class="main-content">
             <div class="header">
                 <div class="header-left">
-                    <button class="toggle-sidebar" onclick="toggleSidebar()">☰</button>
                     <div class="app-title-container">
                         <h1 class="app-title">Chronicler Editor</h1>
                         <span class="app-version">v1.0.0</span>
@@ -875,16 +930,7 @@
         }
 
         function toggleSidebar() {
-            const sidebar = document.getElementById('sidebar');
-            sidebarCollapsed = !sidebarCollapsed;
-            
-            if (window.innerWidth <= 768) {
-                // 手機版：使用 show/hide 類別
-                sidebar.classList.toggle('show');
-            } else {
-                // 桌面版：使用 collapsed 類別來改變寬度
-                sidebar.classList.toggle('collapsed', sidebarCollapsed);
-            }
+            // 移除側邊欄切換功能
         }
 
         function changeTheme(themeName) {
@@ -1360,18 +1406,27 @@
                     element.textContent = `${charCount} 字 / ${tokenCount} tokens`;
                 }
             });
+
+            // 更新meta欄位的統計
+            const metaElements = document.querySelectorAll('.meta-field-input');
+            metaElements.forEach(element => {
+                const text = element.value;
+                const charCount = text.length;
+                const tokenCount = countTokens(text);
+                // 可以選擇是否顯示meta欄位的統計，這裡先保持簡潔
+            });
         }
 
         function renderSidebar() {
             const container = document.getElementById('sidebarContent');
             container.innerHTML = characters.map(character => `
                 <div class="character-item">
-                    <div class="character-header ${character.id === currentCharacterId ? 'active' : ''}" 
+                    <div class="character-header ${character.id === currentCharacterId && document.getElementById(`versions-${character.id}`)?.classList.contains('expanded') ? 'expanded' : (character.id === currentCharacterId ? 'active' : '')}" 
                          onclick="toggleCharacterVersions('${character.id}')">
                         <span>${character.name}</span>
                         <span style="font-size: 0.8em; opacity: 0.7;">${character.versions.length}</span>
                     </div>
-                    <div class="version-list ${character.id === currentCharacterId ? 'expanded' : ''}" id="versions-${character.id}">
+                    <div class="version-list" id="versions-${character.id}">
                         ${character.versions.map(version => `
                             <div class="version-item ${version.id === currentVersionId ? 'active' : ''}" 
                                  onclick="selectVersion('${character.id}', '${version.id}')">
@@ -1385,9 +1440,27 @@
 
         function toggleCharacterVersions(characterId) {
             selectCharacter(characterId);
+            
+            // 切換版本列表的顯示狀態
             const versionsList = document.getElementById(`versions-${characterId}`);
-            if (versionsList) {
-                versionsList.classList.toggle('expanded');
+            const characterHeader = document.querySelector(`[onclick="toggleCharacterVersions('${characterId}')"]`);
+            
+            if (versionsList && characterHeader) {
+                const isExpanded = versionsList.classList.contains('expanded');
+                
+                // 關閉所有其他展開的版本列表
+                document.querySelectorAll('.version-list').forEach(list => {
+                    list.classList.remove('expanded');
+                });
+                document.querySelectorAll('.character-header').forEach(header => {
+                    header.classList.remove('expanded');
+                });
+                
+                // 切換當前的狀態
+                if (!isExpanded) {
+                    versionsList.classList.add('expanded');
+                    characterHeader.classList.add('expanded');
+                }
             }
         }
 
@@ -1451,13 +1524,110 @@
                         </div>
                     </div>
 
+                    <div class="character-info-section">
+                        <div class="avatar-container">
+                            <div class="avatar-display">
+                                ${version.avatar ? 
+                                    `<img src="${version.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" alt="角色圖片">` : 
+                                    '<span>無圖片</span>'
+                                }
+                                <div class="avatar-upload-overlay">
+                                    <label class="file-label">
+                                        選擇圖片
+                                        <input type="file" class="file-input" accept="image/*" 
+                                               onchange="handleImageUpload('${character.id}', '${version.id}', this.files[0])">
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="character-meta-fields">
+                            <div class="meta-field-group">
+                                <label class="meta-field-label">創作者</label>
+                                <input type="text" class="meta-field-input" id="creator-${version.id}" 
+                                       placeholder="創作者名稱（可選）..."
+                                       oninput="updateField('${character.id}', '${version.id}', 'creator', this.value); updateStats()" 
+                                       value="${version.creator || ''}">
+                            </div>
+
+                            <div class="meta-field-group">
+                                <label class="meta-field-label">角色版本</label>
+                                <input type="text" class="meta-field-input" id="charVersion-${version.id}" 
+                                       placeholder="版本號碼或描述（可選）..."
+                                       oninput="updateField('${character.id}', '${version.id}', 'charVersion', this.value); updateStats()" 
+                                       value="${version.charVersion || ''}">
+                            </div>
+
+                            <div class="meta-field-group">
+                                <label class="meta-field-label">創作者備註</label>
+                                <input type="text" class="meta-field-input" id="creatorNotes-${version.id}" 
+                                       placeholder="創作備註或說明（可選）..."
+                                       oninput="updateField('${character.id}', '${version.id}', 'creatorNotes', this.value); updateStats()" 
+                                       value="${version.creatorNotes || ''}">
+                            </div>
+
+                            <div class="meta-field-group">
+                                <label class="meta-field-label">嵌入標籤</label>
+                                <input type="text" class="meta-field-input" id="tags-${version.id}" 
+                                       placeholder="標籤，用逗號分隔（可選）..."
+                                       oninput="updateField('${character.id}', '${version.id}', 'tags', this.value); updateStats()" 
+                                       value="${version.tags || ''}">
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="field-group">
-                        <label class="field-label">角色圖片</label>
-                        <div class="avatar-upload">
-                            ${version.avatar ? `<img src="${version.avatar}" class="avatar-preview" alt="Avatar">` : '<div class="avatar-preview">無圖片</div>'}
-                            <label class="file-label">
-                                選擇圖片
-                                <input type="file" class="file-input" accept="image/*" 
+                        <label class="field-label">
+                            角色描述
+                            <span class="field-stats" data-target="desc-${version.id}">0 字 / 0 tokens</span>
+                        </label>
+                        <textarea class="field-input" id="desc-${version.id}" 
+                                  placeholder="描述角色的外貌、背景、設定等..."
+                                  oninput="updateField('${character.id}', '${version.id}', 'description', this.value); updateStats()">${version.description}</textarea>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">
+                            個性摘要
+                            <span class="field-stats" data-target="personality-${version.id}">0 字 / 0 tokens</span>
+                        </label>
+                        <textarea class="field-input" id="personality-${version.id}" 
+                                  placeholder="角色的性格特徵、行為模式、說話方式等..."
+                                  oninput="updateField('${character.id}', '${version.id}', 'personality', this.value); updateStats()">${version.personality}</textarea>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">
+                            場景設想
+                            <span class="field-stats" data-target="scenario-${version.id}">0 字 / 0 tokens</span>
+                        </label>
+                        <textarea class="field-input" id="scenario-${version.id}" 
+                                  placeholder="角色所處的情境、環境、當前狀況等..."
+                                  oninput="updateField('${character.id}', '${version.id}', 'scenario', this.value); updateStats()">${version.scenario}</textarea>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">
+                            對話範例
+                            <span class="field-stats" data-target="dialogue-${version.id}">0 字 / 0 tokens</span>
+                        </label>
+                        <textarea class="field-input" id="dialogue-${version.id}" 
+                                  placeholder="{{user}}: 你好！\n{{char}}: 你好呀！很高興見到你～"
+                                  oninput="updateField('${character.id}', '${version.id}', 'dialogue', this.value); updateStats()">${version.dialogue}</textarea>
+                    </div>
+
+                    <div class="field-group">
+                        <label class="field-label">
+                            初始訊息
+                            <span class="field-stats" data-target="firstmsg-${version.id}">0 字 / 0 tokens</span>
+                        </label>
+                        <textarea class="field-input" id="firstmsg-${version.id}" 
+                                  placeholder="角色的第一句話或開場白..."
+                                  oninput="updateField('${character.id}', '${version.id}', 'firstMessage', this.value); updateStats()">${version.firstMessage}</textarea>
+                    </div>
+                </div>
+            `;
+        } class="file-input" accept="image/*" 
                                        onchange="handleImageUpload('${character.id}', '${version.id}', this.files[0])">
                             </label>
                         </div>
@@ -1910,10 +2080,9 @@
             const file = event.target.files[0];
             if (!file) return;
 
-            const reader = new FileReader();
-            
             if (file.type === 'application/json' || file.name.endsWith('.json')) {
                 // 處理JSON檔案
+                const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         const data = JSON.parse(e.target.result);
@@ -1925,6 +2094,7 @@
                 reader.readAsText(file);
             } else if (file.type === 'image/png' || file.name.endsWith('.png')) {
                 // 處理PNG檔案
+                const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         const arrayBuffer = e.target.result;
@@ -1934,7 +2104,7 @@
                             // 解碼Base64
                             const jsonString = atob(charaData);
                             const data = JSON.parse(decodeURIComponent(escape(jsonString)));
-                            importCharacterFromData(data);
+                            importCharacterFromData(data, file); // 傳遞原始檔案作為圖片
                         } else {
                             alert('PNG檔案中未找到角色資料，請確認這是有效的角色卡PNG檔案');
                         }
@@ -1990,7 +2160,7 @@
             return null;
         }
 
-        function importCharacterFromData(data) {
+        function importCharacterFromData(data, imageFile = null) {
             const character = {
                 id: generateId(),
                 name: data.name || '匯入角色',
@@ -2009,12 +2179,27 @@
                     firstMessage: data.data?.first_mes || data.first_mes || ''
                 }]
             };
-            characters.push(character);
-            currentCharacterId = character.id;
-            currentVersionId = character.versions[0].id;
-            renderAll();
-            saveData();
-            alert('角色匯入成功！');
+
+            // 如果是PNG檔案，將圖片設定為頭像
+            if (imageFile) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    character.versions[0].avatar = e.target.result;
+                    finishImport();
+                };
+                reader.readAsDataURL(imageFile);
+            } else {
+                finishImport();
+            }
+
+            function finishImport() {
+                characters.push(character);
+                currentCharacterId = character.id;
+                currentVersionId = character.versions[0].id;
+                renderAll();
+                saveData();
+                alert('角色匯入成功！');
+            }
         }
 
         // 初始化應用程式
