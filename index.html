@@ -793,10 +793,85 @@
 
         function countTokens(text) {
             if (!text) return 0;
-            const chineseChars = (text.match(/[\u4e00-\u9fff]/g) || []).length;
-            const englishWords = (text.match(/[a-zA-Z]+/g) || []).length;
-            const punctuation = (text.match(/[^\w\s\u4e00-\u9fff]/g) || []).length;
-            return Math.ceil(chineseChars * 1.5 + englishWords + punctuation * 0.5);
+            
+            // 更精準的token計算，模擬GPT-4的BPE tokenizer
+            // 預處理：移除多餘空白
+            text = text.trim().replace(/\s+/g, ' ');
+            
+            let tokenCount = 0;
+            let i = 0;
+            
+            while (i < text.length) {
+                const char = text[i];
+                
+                // 中文字符（包括日文、韓文）- 通常是1 token
+                if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(char)) {
+                    tokenCount += 1;
+                    i++;
+                }
+                // 英文單詞處理
+                else if (/[a-zA-Z]/.test(char)) {
+                    let wordStart = i;
+                    while (i < text.length && /[a-zA-Z]/.test(text[i])) {
+                        i++;
+                    }
+                    const word = text.slice(wordStart, i);
+                    
+                    // 英文單詞的token估算
+                    if (word.length <= 3) {
+                        tokenCount += 1;
+                    } else if (word.length <= 6) {
+                        tokenCount += 1.5;
+                    } else if (word.length <= 10) {
+                        tokenCount += 2;
+                    } else {
+                        tokenCount += Math.ceil(word.length / 4);
+                    }
+                }
+                // 數字處理
+                else if (/[0-9]/.test(char)) {
+                    let numStart = i;
+                    while (i < text.length && /[0-9.,]/.test(text[i])) {
+                        i++;
+                    }
+                    const num = text.slice(numStart, i);
+                    // 數字通常每2-4位是1個token
+                    tokenCount += Math.ceil(num.replace(/[.,]/g, '').length / 3);
+                }
+                // 標點符號和特殊字符
+                else if (/[^\s]/.test(char)) {
+                    // 常見標點符號組合
+                    if (i < text.length - 1) {
+                        const twoChar = text.slice(i, i + 2);
+                        if (['--', '...', '!!', '??', '::'].includes(twoChar)) {
+                            tokenCount += 1;
+                            i += 2;
+                            continue;
+                        }
+                    }
+                    
+                    // 單個標點符號
+                    if (/[.!?,:;()[\]{}"'`~@#$%^&*+=<>|\\/-]/.test(char)) {
+                        tokenCount += 0.5;
+                    } else {
+                        tokenCount += 1;
+                    }
+                    i++;
+                }
+                // 空白字符
+                else {
+                    // 空格通常不單獨計算token，但會影響分詞
+                    i++;
+                }
+            }
+            
+            // 加上一些特殊格式的額外token（如{{user}}, {{char}}等）
+            const specialTokens = text.match(/\{\{(user|char|random|pick|roll)\}\}/g);
+            if (specialTokens) {
+                tokenCount += specialTokens.length * 0.5;
+            }
+            
+            return Math.ceil(tokenCount);
         }
 
         function toggleSidebar() {
@@ -916,6 +991,44 @@
             } catch (error) {
                 console.error('儲存失敗：', error);
             }
+        }
+
+        function showSaveNotification() {
+            // 創建儲存成功提示
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--success-color);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-size: 0.9em;
+                font-weight: 500;
+                z-index: 9999;
+                box-shadow: var(--shadow-medium);
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+            `;
+            notification.textContent = '✓ 已儲存到瀏覽器';
+            
+            document.body.appendChild(notification);
+            
+            // 滑入動畫
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 10);
+            
+            // 3秒後移除
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
         }
 
         function exportAllData() {
@@ -1332,7 +1445,10 @@
                     <div class="version-header">
                         <input type="text" class="version-title" value="${version.name}" 
                                onchange="updateVersionName('${character.id}', '${version.id}', this.value)">
-                        ${character.versions.length > 1 ? `<button class="btn btn-danger btn-small" onclick="removeVersion('${character.id}', '${version.id}')">刪除</button>` : ''}
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-success btn-small" onclick="saveData(); showSaveNotification()">💾 儲存</button>
+                            ${character.versions.length > 1 ? `<button class="btn btn-danger btn-small" onclick="removeVersion('${character.id}', '${version.id}')">刪除</button>` : ''}
+                        </div>
                     </div>
 
                     <div class="field-group">
@@ -1795,37 +1911,110 @@
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    const character = {
-                        id: generateId(),
-                        name: data.name || '匯入角色',
-                        versions: [{
-                            id: generateId(),
-                            name: '匯入版本',
-                            avatar: '',
-                            creator: data.data?.creator || data.creator || '',
-                            charVersion: data.data?.character_version || data.character_version || '',
-                            creatorNotes: data.data?.creator_notes || data.creatorcomment || '',
-                            tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.data?.tags ? data.data.tags.join(', ') : ''),
-                            description: data.data?.description || data.description || '',
-                            personality: data.data?.personality || data.personality || '',
-                            scenario: data.data?.scenario || data.scenario || '',
-                            dialogue: data.data?.mes_example || data.mes_example || '',
-                            firstMessage: data.data?.first_mes || data.first_mes || ''
-                        }]
-                    };
-                    characters.push(character);
-                    currentCharacterId = character.id;
-                    currentVersionId = character.versions[0].id;
-                    renderAll();
-                    saveData();
-                } catch (error) {
-                    alert('檔案格式錯誤，請確認是有效的JSON檔案');
+            
+            if (file.type === 'application/json' || file.name.endsWith('.json')) {
+                // 處理JSON檔案
+                reader.onload = function(e) {
+                    try {
+                        const data = JSON.parse(e.target.result);
+                        importCharacterFromData(data);
+                    } catch (error) {
+                        alert('JSON檔案格式錯誤，請確認是有效的角色卡檔案');
+                    }
+                };
+                reader.readAsText(file);
+            } else if (file.type === 'image/png' || file.name.endsWith('.png')) {
+                // 處理PNG檔案
+                reader.onload = function(e) {
+                    try {
+                        const arrayBuffer = e.target.result;
+                        const charaData = extractCharaFromPNG(new Uint8Array(arrayBuffer));
+                        
+                        if (charaData) {
+                            // 解碼Base64
+                            const jsonString = atob(charaData);
+                            const data = JSON.parse(decodeURIComponent(escape(jsonString)));
+                            importCharacterFromData(data);
+                        } else {
+                            alert('PNG檔案中未找到角色資料，請確認這是有效的角色卡PNG檔案');
+                        }
+                    } catch (error) {
+                        alert('PNG檔案讀取失敗：' + error.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                alert('請選擇JSON或PNG格式的角色卡檔案');
+            }
+        }
+
+        function extractCharaFromPNG(pngData) {
+            // 跳過PNG簽名
+            let pos = 8;
+            
+            while (pos < pngData.length) {
+                // 讀取chunk長度
+                const length = (pngData[pos] << 24) | (pngData[pos + 1] << 16) | (pngData[pos + 2] << 8) | pngData[pos + 3];
+                
+                // 讀取chunk類型
+                const type = String.fromCharCode(pngData[pos + 4], pngData[pos + 5], pngData[pos + 6], pngData[pos + 7]);
+                
+                if (type === 'tEXt') {
+                    // 讀取tEXt chunk的資料
+                    const textData = pngData.slice(pos + 8, pos + 8 + length);
+                    
+                    // 尋找null分隔符
+                    let nullPos = -1;
+                    for (let i = 0; i < textData.length; i++) {
+                        if (textData[i] === 0) {
+                            nullPos = i;
+                            break;
+                        }
+                    }
+                    
+                    if (nullPos !== -1) {
+                        // 提取keyword和text
+                        const keyword = new TextDecoder().decode(textData.slice(0, nullPos));
+                        const text = new TextDecoder().decode(textData.slice(nullPos + 1));
+                        
+                        if (keyword === 'chara') {
+                            return text;
+                        }
+                    }
                 }
+                
+                if (type === 'IEND') break;
+                pos += 12 + length;
+            }
+            
+            return null;
+        }
+
+        function importCharacterFromData(data) {
+            const character = {
+                id: generateId(),
+                name: data.name || '匯入角色',
+                versions: [{
+                    id: generateId(),
+                    name: '匯入版本',
+                    avatar: '',
+                    creator: data.data?.creator || data.creator || '',
+                    charVersion: data.data?.character_version || data.character_version || '',
+                    creatorNotes: data.data?.creator_notes || data.creatorcomment || '',
+                    tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.data?.tags ? data.data.tags.join(', ') : ''),
+                    description: data.data?.description || data.description || '',
+                    personality: data.data?.personality || data.personality || '',
+                    scenario: data.data?.scenario || data.scenario || '',
+                    dialogue: data.data?.mes_example || data.mes_example || '',
+                    firstMessage: data.data?.first_mes || data.first_mes || ''
+                }]
             };
-            reader.readAsText(file);
+            characters.push(character);
+            currentCharacterId = character.id;
+            currentVersionId = character.versions[0].id;
+            renderAll();
+            saveData();
+            alert('角色匯入成功！');
         }
 
         // 初始化應用程式
