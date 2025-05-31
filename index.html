@@ -1,18 +1,614 @@
-// 計算原始圖片的縮放比例
+const primaryInput = document.getElementById('primary-color');
+            const secondaryInput = document.getElementById('secondary-color');
+            const accentInput = document.getElementById('accent-color');
+            const bgInput = document.getElementById('bg-color');
+            
+            function updatePreview() {
+                document.getElementById('preview-primary').style.backgroundColor = primaryInput.value;
+                document.getElementById('preview-secondary').style.backgroundColor = secondaryInput.value;
+                document.getElementById('preview-accent').style.backgroundColor = accentInput.value;
+            }
+            
+            primaryInput.addEventListener('input', updatePreview);
+            secondaryInput.addEventListener('input', updatePreview);
+            accentInput.addEventListener('input', updatePreview);
+            bgInput.addEventListener('input', updatePreview);
+            
+            updatePreview();
+            
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
+        function applyCustomColors() {
+            const primary = document.getElementById('primary-color').value;
+            const secondary = document.getElementById('secondary-color').value;
+            const accent = document.getElementById('accent-color').value;
+            const bg = document.getElementById('bg-color').value;
+            
+            const root = document.documentElement;
+            root.style.setProperty('--primary-color', primary);
+            root.style.setProperty('--secondary-color', secondary);
+            root.style.setProperty('--accent-color', accent);
+            root.style.setProperty('--bg-color', bg);
+            
+            localStorage.setItem('characterCreatorCustomColors', JSON.stringify({
+                primary, secondary, accent, bg
+            }));
+            
+            document.querySelector('.modal').remove();
+        }
+
+        function saveData() {
+            try {
+                localStorage.setItem('characterCreatorData', JSON.stringify(characters));
+                showSaveNotification();
+            } catch (error) {
+                console.error('儲存失敗：', error);
+            }
+        }
+
+        function showSaveNotification() {
+            const notification = document.createElement('div');
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: var(--success-color);
+                color: white;
+                padding: 12px 20px;
+                border-radius: 6px;
+                font-size: 0.9em;
+                font-weight: 500;
+                z-index: 9999;
+                box-shadow: var(--shadow-medium);
+                transform: translateX(100%);
+                transition: transform 0.3s ease;
+            `;
+            notification.textContent = '✓ 已儲存到瀏覽器';
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+            }, 10);
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 2000);
+        }
+
+        function exportAllData() {
+            const exportData = {
+                characters: characters,
+                exportDate: new Date().toISOString(),
+                version: '1.0.0'
+            };
+            
+            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `chronicler_backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importAllData() {
+            document.getElementById('importAllFile').click();
+        }
+
+        function handleImportAll(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.characters && Array.isArray(data.characters)) {
+                        const confirmImport = confirm(`確定要匯入 ${data.characters.length} 個角色嗎？這將覆蓋現有的所有資料！`);
+                        
+                        if (confirmImport) {
+                            characters = data.characters;
+                            currentCharacterId = characters[0]?.id || null;
+                            currentVersionId = characters[0]?.versions[0]?.id || null;
+                            compareVersions = [];
+                            
+                            renderAll();
+                            saveData();
+                            alert('資料匯入成功！');
+                        }
+                    } else {
+                        alert('檔案格式不正確，請選擇有效的備份檔案');
+                    }
+                } catch (error) {
+                    alert('檔案讀取失敗：' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function loadData() {
+            try {
+                const saved = localStorage.getItem('characterCreatorData');
+                if (saved) {
+                    characters = JSON.parse(saved);
+                    if (characters.length > 0) {
+                        currentCharacterId = characters[0].id;
+                        currentVersionId = characters[0].versions[0].id;
+                    }
+                }
+            } catch (error) {
+                console.error('載入資料失敗：', error);
+            }
+        }
+
+        function addCharacter() {
+            const character = {
+                id: generateId(),
+                name: `角色 ${characters.length + 1}`,
+                versions: [{
+                    id: generateId(),
+                    name: '版本 1',
+                    avatar: '',
+                    description: '',
+                    personality: '',
+                    scenario: '',
+                    dialogue: '',
+                    firstMessage: '',
+                    creator: '',
+                    charVersion: '',
+                    creatorNotes: '',
+                    tags: ''
+                }]
+            };
+            characters.push(character);
+            currentCharacterId = character.id;
+            currentVersionId = character.versions[0].id;
+            renderAll();
+            saveData();
+        }
+
+        function removeCharacter(characterId) {
+            if (characters.length <= 1) {
+                alert('至少需要保留一個角色');
+                return;
+            }
+            characters = characters.filter(c => c.id !== characterId);
+            if (currentCharacterId === characterId) {
+                currentCharacterId = characters[0]?.id || null;
+                currentVersionId = characters[0]?.versions[0]?.id || null;
+            }
+            renderAll();
+            saveData();
+        }
+
+        function addVersion(characterId) {
+            const character = characters.find(c => c.id === characterId);
+            if (character) {
+                const newVersion = {
+                    id: generateId(),
+                    name: `版本 ${character.versions.length + 1}`,
+                    avatar: '',
+                    description: '',
+                    personality: '',
+                    scenario: '',
+                    dialogue: '',
+                    firstMessage: '',
+                    creator: '',
+                    charVersion: '',
+                    creatorNotes: '',
+                    tags: ''
+                };
+                character.versions.push(newVersion);
+                currentVersionId = newVersion.id;
+                renderAll();
+                saveData();
+            }
+        }
+
+        function removeVersion(characterId, versionId) {
+            const character = characters.find(c => c.id === characterId);
+            if (character && character.versions.length > 1) {
+                character.versions = character.versions.filter(v => v.id !== versionId);
+                if (currentVersionId === versionId) {
+                    currentVersionId = character.versions[0].id;
+                }
+                renderAll();
+                saveData();
+            } else {
+                alert('至少需要保留一個版本');
+            }
+        }
+
+        function selectCharacter(characterId) {
+            currentCharacterId = characterId;
+            const character = characters.find(c => c.id === characterId);
+            if (character) {
+                currentVersionId = character.versions[0].id;
+            }
+            renderAll();
+        }
+
+        function selectVersion(characterId, versionId) {
+            currentCharacterId = characterId;
+            currentVersionId = versionId;
+            viewMode = 'single';
+            renderAll();
+        }
+
+        function toggleCompareMode() {
+            if (viewMode === 'single') {
+                const currentCharacter = characters.find(c => c.id === currentCharacterId);
+                if (currentCharacter && currentCharacter.versions.length > 1) {
+                    showVersionSelector();
+                } else {
+                    alert('需要至少2個版本才能進行對比');
+                }
+            } else {
+                viewMode = 'single';
+                compareVersions = [];
+                renderAll();
+            }
+        }
+
+        function showVersionSelector() {
+            const currentCharacter = characters.find(c => c.id === currentCharacterId);
+            if (!currentCharacter) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h3 class="modal-title">選擇要對比的版本</h3>
+                        <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
+                    </div>
+                    
+                    <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9em;">選擇2-3個版本進行對比 (目前已選: <span id="selected-count">0</span>/3)</p>
+                    
+                    <div class="version-checkboxes">
+                        ${currentCharacter.versions.map(version => `
+                            <div class="version-checkbox" data-version-id="${version.id}" onclick="toggleVersionSelection('${version.id}')">
+                                <input type="checkbox" id="check-${version.id}" onchange="event.stopPropagation()">
+                                <label for="check-${version.id}">${version.name}</label>
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
+                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
+                        <button class="btn btn-primary" onclick="applyVersionComparison()" id="apply-compare" disabled>開始對比</button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            compareVersions.forEach(versionId => {
+                const checkbox = document.getElementById(`check-${versionId}`);
+                const container = document.querySelector(`[data-version-id="${versionId}"]`);
+                if (checkbox && container) {
+                    checkbox.checked = true;
+                    container.classList.add('selected');
+                }
+            });
+            updateSelectedCount();
+            
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+
+        function toggleVersionSelection(versionId) {
+            const checkbox = document.getElementById(`check-${versionId}`);
+            const container = document.querySelector(`[data-version-id="${versionId}"]`);
+            
+            if (checkbox.checked) {
+                checkbox.checked = false;
+                container.classList.remove('selected');
+                compareVersions = compareVersions.filter(id => id !== versionId);
+            } else {
+                if (compareVersions.length < 3) {
+                    checkbox.checked = true;
+                    container.classList.add('selected');
+                    compareVersions.push(versionId);
+                } else {
+                    alert('最多只能選擇3個版本');
+                }
+            }
+            
+            updateSelectedCount();
+        }
+
+        function updateSelectedCount() {
+            const countElement = document.getElementById('selected-count');
+            const applyButton = document.getElementById('apply-compare');
+            
+            if (countElement) {
+                countElement.textContent = compareVersions.length;
+            }
+            
+            if (applyButton) {
+                applyButton.disabled = compareVersions.length < 2;
+            }
+        }
+
+        function applyVersionComparison() {
+            if (compareVersions.length >= 2) {
+                viewMode = 'compare';
+                document.querySelector('.modal').remove();
+                renderAll();
+            }
+        }
+
+        function updateField(characterId, versionId, field, value) {
+            const character = characters.find(c => c.id === characterId);
+            if (character) {
+                const version = character.versions.find(v => v.id === versionId);
+                if (version) {
+                    version[field] = value;
+                    updateStats();
+                    saveData();
+                }
+            }
+        }
+
+        function updateCharacterName(characterId, name) {
+            const character = characters.find(c => c.id === characterId);
+            if (character) {
+                character.name = name;
+                renderSidebar();
+                saveData();
+            }
+        }
+
+        function updateVersionName(characterId, versionId, name) {
+            const character = characters.find(c => c.id === characterId);
+            if (character) {
+                const version = character.versions.find(v => v.id === versionId);
+                if (version) {
+                    version.name = name;
+                    renderSidebar();
+                    saveData();
+                }
+            }
+        }
+
+        function handleImageUpload(characterId, versionId, file) {
+            if (file) {
+                showImageCropModal(file, function(croppedImageData) {
+                    updateField(characterId, versionId, 'avatar', croppedImageData);
+                    renderContent();
+                });
+            }
+        }
+
+        function showImageCropModal(file, callback) {
+            const modal = document.createElement('div');
+            modal.className = 'crop-modal';
+            modal.style.display = 'block';
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                modal.innerHTML = `
+                    <div class="crop-modal-content">
+                        <div class="modal-header">
+                            <h3 class="modal-title">裁剪圖片</h3>
+                            <button class="close-modal" onclick="this.closest('.crop-modal').remove()">×</button>
+                        </div>
+                        
+                        <div class="crop-info">
+                            拖拽選擇框來調整裁剪區域。圖片將被裁剪為 2:3 比例（寬:高）
+                        </div>
+                        
+                        <div class="crop-container" id="cropContainer">
+                            <img class="crop-image" id="cropImage" src="${e.target.result}" alt="待裁剪圖片">
+                            <div class="crop-overlay" id="cropOverlay">
+                                <div class="crop-handle nw"></div>
+                                <div class="crop-handle ne"></div>
+                                <div class="crop-handle sw"></div>
+                                <div class="crop-handle se"></div>
+                            </div>
+                        </div>
+                        
+                        <div class="crop-controls">
+                            <button class="btn btn-secondary" onclick="resetCropArea()">重置</button>
+                            <button class="btn btn-secondary" onclick="this.closest('.crop-modal').remove()">取消</button>
+                            <button class="btn btn-primary" onclick="applyCrop()">確認裁剪</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                
+                const img = document.getElementById('cropImage');
+                img.onload = function() {
+                    initializeCropArea();
+                };
+                
+                if (img.complete) {
+                    initializeCropArea();
+                }
+                
+                window.currentCropCallback = callback;
+                
+                modal.addEventListener('click', function(e) {
+                    if (e.target === modal) {
+                        modal.remove();
+                    }
+                });
+            };
+            
+            reader.readAsDataURL(file);
+        }
+
+        function initializeCropArea() {
+            const container = document.getElementById('cropContainer');
+            const img = document.getElementById('cropImage');
+            const overlay = document.getElementById('cropOverlay');
+            
+            const imgWidth = img.offsetWidth;
+            const imgHeight = img.offsetHeight;
+            
+            let cropWidth, cropHeight;
+            if (imgWidth / imgHeight > 2/3) {
+                cropHeight = imgHeight * 0.8;
+                cropWidth = cropHeight * (2/3);
+            } else {
+                cropWidth = imgWidth * 0.8;
+                cropHeight = cropWidth * (3/2);
+            }
+            
+            const cropX = (imgWidth - cropWidth) / 2;
+            const cropY = (imgHeight - cropHeight) / 2;
+            
+            overlay.style.left = cropX + 'px';
+            overlay.style.top = cropY + 'px';
+            overlay.style.width = cropWidth + 'px';
+            overlay.style.height = cropHeight + 'px';
+            
+            addCropInteraction();
+        }
+
+        function addCropInteraction() {
+            const overlay = document.getElementById('cropOverlay');
+            const img = document.getElementById('cropImage');
+            
+            let isDragging = false;
+            let isResizing = false;
+            let startX, startY, startLeft, startTop, startWidth, startHeight;
+            let resizeHandle = null;
+            
+            overlay.addEventListener('mousedown', function(e) {
+                if (e.target.classList.contains('crop-handle')) {
+                    isResizing = true;
+                    resizeHandle = e.target.classList[1];
+                } else {
+                    isDragging = true;
+                }
+                
+                startX = e.clientX;
+                startY = e.clientY;
+                startLeft = parseInt(overlay.style.left);
+                startTop = parseInt(overlay.style.top);
+                startWidth = parseInt(overlay.style.width);
+                startHeight = parseInt(overlay.style.height);
+                
+                e.preventDefault();
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (!isDragging && !isResizing) return;
+                
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                
+                if (isDragging) {
+                    let newLeft = startLeft + deltaX;
+                    let newTop = startTop + deltaY;
+                    
+                    newLeft = Math.max(0, Math.min(newLeft, img.offsetWidth - startWidth));
+                    newTop = Math.max(0, Math.min(newTop, img.offsetHeight - startHeight));
+                    
+                    overlay.style.left = newLeft + 'px';
+                    overlay.style.top = newTop + 'px';
+                } else if (isResizing) {
+                    let newWidth = startWidth;
+                    let newHeight = startHeight;
+                    let newLeft = startLeft;
+                    let newTop = startTop;
+                    
+                    if (resizeHandle.includes('e')) {
+                        newWidth = startWidth + deltaX;
+                    }
+                    if (resizeHandle.includes('w')) {
+                        newWidth = startWidth - deltaX;
+                        newLeft = startLeft + deltaX;
+                    }
+                    if (resizeHandle.includes('s')) {
+                        newHeight = startHeight + deltaY;
+                    }
+                    if (resizeHandle.includes('n')) {
+                        newHeight = startHeight - deltaY;
+                        newTop = startTop + deltaY;
+                    }
+                    
+                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
+                        newHeight = newWidth * (3/2);
+                    } else {
+                        newWidth = newHeight * (2/3);
+                    }
+                    
+                    newWidth = Math.max(50, newWidth);
+                    newHeight = Math.max(75, newHeight);
+                    
+                    if (newLeft + newWidth > img.offsetWidth) {
+                        newWidth = img.offsetWidth - newLeft;
+                        newHeight = newWidth * (3/2);
+                    }
+                    if (newTop + newHeight > img.offsetHeight) {
+                        newHeight = img.offsetHeight - newTop;
+                        newWidth = newHeight * (2/3);
+                    }
+                    if (newLeft < 0) {
+                        newLeft = 0;
+                    }
+                    if (newTop < 0) {
+                        newTop = 0;
+                    }
+                    
+                    overlay.style.width = newWidth + 'px';
+                    overlay.style.height = newHeight + 'px';
+                    overlay.style.left = newLeft + 'px';
+                    overlay.style.top = newTop + 'px';
+                }
+            });
+            
+            document.addEventListener('mouseup', function() {
+                isDragging = false;
+                isResizing = false;
+                resizeHandle = null;
+            });
+        }
+
+        function resetCropArea() {
+            initializeCropArea();
+        }
+
+        function applyCrop() {
+            const img = document.getElementById('cropImage');
+            const overlay = document.getElementById('cropOverlay');
+            
+            const cropX = parseInt(overlay.style.left);
+            const cropY = parseInt(overlay.style.top);
+            const cropWidth = parseInt(overlay.style.width);
+            const cropHeight = parseInt(overlay.style.height);
+            
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // 設定輸出尺寸（保持2:3比例）
             const outputWidth = 400;
             const outputHeight = 600;
             canvas.width = outputWidth;
             canvas.height = outputHeight;
             
-            // 計算縮放比例
             const scaleX = img.naturalWidth / img.offsetWidth;
             const scaleY = img.naturalHeight / img.offsetHeight;
             
-            // 繪製裁剪後的圖片
             ctx.drawImage(
                 img,
                 cropX * scaleX,
@@ -25,16 +621,13 @@
                 outputHeight
             );
             
-            // 轉為base64
             const croppedImageData = canvas.toDataURL('image/png', 0.9);
             
-            // 執行回調
             if (window.currentCropCallback) {
                 window.currentCropCallback(croppedImageData);
                 window.currentCropCallback = null;
             }
             
-            // 關閉彈窗
             document.querySelector('.crop-modal').remove();
         }
 
@@ -50,22 +643,13 @@
                     element.textContent = `${charCount} 字 / ${tokenCount} tokens`;
                 }
             });
-
-            // 更新meta欄位的統計
-            const metaElements = document.querySelectorAll('.meta-field-input');
-            metaElements.forEach(element => {
-                const text = element.value;
-                const charCount = text.length;
-                const tokenCount = countTokens(text);
-                // 可以選擇是否顯示meta欄位的統計，這裡先保持簡潔
-            });
         }
 
         function renderSidebar() {
             const container = document.getElementById('sidebarContent');
             container.innerHTML = characters.map(character => `
                 <div class="character-item">
-                    <div class="character-header ${character.id === currentCharacterId && document.getElementById(\`versions-\${character.id}\`)?.classList.contains('expanded') ? 'expanded' : (character.id === currentCharacterId ? 'active' : '')}" 
+                    <div class="character-header ${character.id === currentCharacterId ? 'active' : ''}" 
                          onclick="toggleCharacterVersions('${character.id}')">
                         <span>${character.name}</span>
                         <span style="font-size: 0.8em; opacity: 0.7;">${character.versions.length}</span>
@@ -85,14 +669,12 @@
         function toggleCharacterVersions(characterId) {
             selectCharacter(characterId);
             
-            // 切換版本列表的顯示狀態
             const versionsList = document.getElementById(`versions-${characterId}`);
             const characterHeader = document.querySelector(`[onclick="toggleCharacterVersions('${characterId}')"]`);
             
             if (versionsList && characterHeader) {
                 const isExpanded = versionsList.classList.contains('expanded');
                 
-                // 關閉所有其他展開的版本列表
                 document.querySelectorAll('.version-list').forEach(list => {
                     list.classList.remove('expanded');
                 });
@@ -100,7 +682,6 @@
                     header.classList.remove('expanded');
                 });
                 
-                // 切換當前的狀態
                 if (!isExpanded) {
                     versionsList.classList.add('expanded');
                     characterHeader.classList.add('expanded');
@@ -163,7 +744,7 @@
                         <input type="text" class="version-title" value="${version.name}" 
                                onchange="updateVersionName('${character.id}', '${version.id}', this.value)">
                         <div style="display: flex; gap: 8px;">
-                            <button class="btn btn-success btn-small" onclick="saveData(); showSaveNotification()">💾 儲存</button>
+                            <button class="btn btn-success btn-small" onclick="saveData()">💾 儲存</button>
                             ${character.versions.length > 1 ? `<button class="btn btn-danger btn-small" onclick="removeVersion('${character.id}', '${version.id}')">刪除</button>` : ''}
                         </div>
                     </div>
@@ -385,7 +966,6 @@
             const character = characters.find(c => c.id === characterId);
             if (!character) return;
 
-            // 選擇版本
             let selectedVersion;
             if (character.versions.length === 1) {
                 selectedVersion = character.versions[0];
@@ -399,7 +979,6 @@
                 }
             }
 
-            // 創建與JSON相同的資料結構
             const characterData = {
                 name: character.name,
                 description: selectedVersion.description,
@@ -450,66 +1029,54 @@
                 }).replace(/\//g, '-').replace(',', ' @').replace(/:/g, 'h ').replace(/(\d+)$/, '$1s') + ' ' + new Date().getMilliseconds() + 'ms'
             };
 
-            // 將JSON轉為Base64
             const jsonString = JSON.stringify(characterData);
             const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
 
-            // 創建或使用現有的頭像圖片
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
             if (selectedVersion.avatar) {
-                // 如果有頭像，使用頭像作為PNG圖片
                 const img = new Image();
                 img.onload = function() {
                     canvas.width = img.width;
                     canvas.height = img.height;
                     ctx.drawImage(img, 0, 0);
                     
-                    // 嵌入chara metadata並下載
                     createPNGWithMetadata(canvas, base64Data, character.name);
                 };
                 img.src = selectedVersion.avatar;
             } else {
-                // 如果沒有頭像，創建預設圖片
                 canvas.width = 400;
                 canvas.height = 600;
                 
-                // 創建漸層背景
                 const gradient = ctx.createLinearGradient(0, 0, 0, 600);
                 gradient.addColorStop(0, '#f7f5f3');
                 gradient.addColorStop(1, '#e2e8f0');
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, 400, 600);
                 
-                // 添加角色名稱
                 ctx.fillStyle = '#2d3748';
                 ctx.font = 'bold 24px "Noto Serif CJK JP", serif';
                 ctx.textAlign = 'center';
                 ctx.fillText(character.name, 200, 300);
                 
-                // 添加副標題
                 ctx.font = '16px "Noto Serif CJK JP", serif';
                 ctx.fillStyle = '#718096';
                 ctx.fillText('Character Card', 200, 330);
                 
-                // 嵌入chara metadata並下載
                 createPNGWithMetadata(canvas, base64Data, character.name);
             }
         }
 
         function createPNGWithMetadata(canvas, base64Data, characterName) {
-            // 將Canvas轉為ImageData
             canvas.toBlob(function(blob) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     const arrayBuffer = e.target.result;
                     const uint8Array = new Uint8Array(arrayBuffer);
                     
-                    // 在PNG中嵌入tEXt chunk with "chara" keyword
                     const modifiedPNG = addTextChunkToPNG(uint8Array, 'chara', base64Data);
                     
-                    // 下載修改後的PNG
                     const modifiedBlob = new Blob([modifiedPNG], { type: 'image/png' });
                     const url = URL.createObjectURL(modifiedBlob);
                     const a = document.createElement('a');
@@ -523,12 +1090,10 @@
         }
 
         function addTextChunkToPNG(pngData, keyword, text) {
-            // PNG檔案結構：8位元組PNG簽名 + 數個chunks + IEND chunk
             const signature = pngData.slice(0, 8);
             let pos = 8;
             const chunks = [];
             
-            // 讀取所有現有的chunks
             while (pos < pngData.length) {
                 const length = (pngData[pos] << 24) | (pngData[pos + 1] << 16) | (pngData[pos + 2] << 8) | pngData[pos + 3];
                 const type = String.fromCharCode(pngData[pos + 4], pngData[pos + 5], pngData[pos + 6], pngData[pos + 7]);
@@ -540,27 +1105,23 @@
                 pos += 12 + length;
             }
             
-            // 創建tEXt chunk
             const keywordBytes = new TextEncoder().encode(keyword);
             const textBytes = new TextEncoder().encode(text);
             const chunkData = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
             chunkData.set(keywordBytes, 0);
-            chunkData[keywordBytes.length] = 0; // null separator
+            chunkData[keywordBytes.length] = 0;
             chunkData.set(textBytes, keywordBytes.length + 1);
             
-            // 計算CRC
-            const crc = calculateCRC32([0x74, 0x45, 0x58, 0x74, ...chunkData]); // "tEXt" + data
+            const crc = calculateCRC32([0x74, 0x45, 0x58, 0x74, ...chunkData]);
             
-            // 組裝tEXt chunk
             const textChunk = new Uint8Array(12 + chunkData.length);
             const lengthBytes = [(chunkData.length >>> 24) & 0xFF, (chunkData.length >>> 16) & 0xFF, (chunkData.length >>> 8) & 0xFF, chunkData.length & 0xFF];
             textChunk.set(lengthBytes, 0);
-            textChunk.set([0x74, 0x45, 0x58, 0x74], 4); // "tEXt"
+            textChunk.set([0x74, 0x45, 0x58, 0x74], 4);
             textChunk.set(chunkData, 8);
             textChunk.set([(crc >>> 24) & 0xFF, (crc >>> 16) & 0xFF, (crc >>> 8) & 0xFF, crc & 0xFF], 8 + chunkData.length);
             
-            // 重新組裝PNG：簽名 + 原有chunks (除了IEND) + tEXt chunk + IEND
-            const iendChunk = chunks.pop(); // 移除IEND
+            const iendChunk = chunks.pop();
             const totalLength = signature.length + chunks.reduce((sum, chunk) => sum + chunk.length, 0) + textChunk.length + iendChunk.length;
             const result = new Uint8Array(totalLength);
             
@@ -620,7 +1181,6 @@
             if (!file) return;
 
             if (file.type === 'application/json' || file.name.endsWith('.json')) {
-                // 處理JSON檔案
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
@@ -632,7 +1192,6 @@
                 };
                 reader.readAsText(file);
             } else if (file.type === 'image/png' || file.name.endsWith('.png')) {
-                // 處理PNG檔案
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
@@ -640,10 +1199,9 @@
                         const charaData = extractCharaFromPNG(new Uint8Array(arrayBuffer));
                         
                         if (charaData) {
-                            // 解碼Base64
                             const jsonString = atob(charaData);
                             const data = JSON.parse(decodeURIComponent(escape(jsonString)));
-                            importCharacterFromData(data, file); // 傳遞原始檔案作為圖片
+                            importCharacterFromData(data, file);
                         } else {
                             alert('PNG檔案中未找到角色資料，請確認這是有效的角色卡PNG檔案');
                         }
@@ -658,21 +1216,15 @@
         }
 
         function extractCharaFromPNG(pngData) {
-            // 跳過PNG簽名
             let pos = 8;
             
             while (pos < pngData.length) {
-                // 讀取chunk長度
                 const length = (pngData[pos] << 24) | (pngData[pos + 1] << 16) | (pngData[pos + 2] << 8) | pngData[pos + 3];
-                
-                // 讀取chunk類型
                 const type = String.fromCharCode(pngData[pos + 4], pngData[pos + 5], pngData[pos + 6], pngData[pos + 7]);
                 
                 if (type === 'tEXt') {
-                    // 讀取tEXt chunk的資料
                     const textData = pngData.slice(pos + 8, pos + 8 + length);
                     
-                    // 尋找null分隔符
                     let nullPos = -1;
                     for (let i = 0; i < textData.length; i++) {
                         if (textData[i] === 0) {
@@ -682,7 +1234,6 @@
                     }
                     
                     if (nullPos !== -1) {
-                        // 提取keyword和text
                         const keyword = new TextDecoder().decode(textData.slice(0, nullPos));
                         const text = new TextDecoder().decode(textData.slice(nullPos + 1));
                         
@@ -719,7 +1270,6 @@
                 }]
             };
 
-            // 如果是PNG檔案，將圖片設定為頭像
             if (imageFile) {
                 const reader = new FileReader();
                 reader.onload = function(e) {
@@ -741,9 +1291,7 @@
             }
         }
 
-        // 初始化應用程式
         function initApp() {
-            // 載入儲存的自訂顏色，如果沒有則使用預設
             const savedColors = localStorage.getItem('characterCreatorCustomColors');
             if (savedColors) {
                 const colors = JSON.parse(savedColors);
@@ -753,820 +1301,22 @@
                 root.style.setProperty('--accent-color', colors.accent);
                 root.style.setProperty('--bg-color', colors.bg);
             }
-            // 使用CSS預設值，不需要額外設定
 
-            // 載入角色資料
             loadData();
 
-            // 如果沒有角色，創建預設角色
             if (characters.length === 0) {
                 addCharacter();
             } else {
                 renderAll();
             }
 
-            // 定期更新統計
             setInterval(updateTotalStats, 2000);
-
-            // 響應式處理
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768) {
-                    document.getElementById('sidebar').classList.remove('show');
-                }
-            });
         }
 
-        // 啟動應用程式
         document.addEventListener('DOMContentLoaded', initApp);
-    </script>    <script>
-        let characters = [];
-        let currentCharacterId = null;
-        let currentVersionId = null;
-        let viewMode = 'single'; // 'single' 或 'compare'
-        let sidebarCollapsed = false;
-        let compareVersions = []; // 用於對比檢視的版本選擇
-
-        // 主題配色 - 英倫風低彩度配色
-        const themes = {
-            classic: { primary: '#2d3748', secondary: '#1a202c', accent: '#8b7355', bg: '#f7f5f3' },
-            warm: { primary: '#744210', secondary: '#553c9a', accent: '#d69e2e', bg: '#fefcf0' },
-            cool: { primary: '#2c5282', secondary: '#2a4365', accent: '#3182ce', bg: '#f0f8ff' },
-            forest: { primary: '#22543d', secondary: '#1a202c', accent: '#38a169', bg: '#f0fff4' },
-            vintage: { primary: '#553c9a', secondary: '#44337a', accent: '#9f7aea', bg: '#faf5ff' },
-            minimal: { primary: '#4a5568', secondary: '#2d3748', accent: '#718096', bg: '#f8f9fa' }
-        };
-
-        function generateId() {
-            return Date.now().toString(36) + Math.random().toString(36).substr(2);
-        }
-
-        function countTokens(text) {
-            if (!text) return 0;
-            
-            // 更精準的token計算，模擬GPT-4的BPE tokenizer
-            // 預處理：移除多餘空白
-            text = text.trim().replace(/\s+/g, ' ');
-            
-            let tokenCount = 0;
-            let i = 0;
-            
-            while (i < text.length) {
-                const char = text[i];
-                
-                // 中文字符（包括日文、韓文）- 通常是1 token
-                if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(char)) {
-                    tokenCount += 1;
-                    i++;
-                }
-                // 英文單詞處理
-                else if (/[a-zA-Z]/.test(char)) {
-                    let wordStart = i;
-                    while (i < text.length && /[a-zA-Z]/.test(text[i])) {
-                        i++;
-                    }
-                    const word = text.slice(wordStart, i);
-                    
-                    // 英文單詞的token估算
-                    if (word.length <= 3) {
-                        tokenCount += 1;
-                    } else if (word.length <= 6) {
-                        tokenCount += 1.5;
-                    } else if (word.length <= 10) {
-                        tokenCount += 2;
-                    } else {
-                        tokenCount += Math.ceil(word.length / 4);
-                    }
-                }
-                // 數字處理
-                else if (/[0-9]/.test(char)) {
-                    let numStart = i;
-                    while (i < text.length && /[0-9.,]/.test(text[i])) {
-                        i++;
-                    }
-                    const num = text.slice(numStart, i);
-                    // 數字通常每2-4位是1個token
-                    tokenCount += Math.ceil(num.replace(/[.,]/g, '').length / 3);
-                }
-                // 標點符號和特殊字符
-                else if (/[^\s]/.test(char)) {
-                    // 常見標點符號組合
-                    if (i < text.length - 1) {
-                        const twoChar = text.slice(i, i + 2);
-                        if (['--', '...', '!!', '??', '::'].includes(twoChar)) {
-                            tokenCount += 1;
-                            i += 2;
-                            continue;
-                        }
-                    }
-                    
-                    // 單個標點符號
-                    if (/[.!?,:;()[\]{}"'`~@#$%^&*+=<>|\\/-]/.test(char)) {
-                        tokenCount += 0.5;
-                    } else {
-                        tokenCount += 1;
-                    }
-                    i++;
-                }
-                // 空白字符
-                else {
-                    // 空格通常不單獨計算token，但會影響分詞
-                    i++;
-                }
-            }
-            
-            // 加上一些特殊格式的額外token（如{{user}}, {{char}}等）
-            const specialTokens = text.match(/\{\{(user|char|random|pick|roll)\}\}/g);
-            if (specialTokens) {
-                tokenCount += specialTokens.length * 0.5;
-            }
-            
-            return Math.ceil(tokenCount);
-        }
-
-        function toggleSidebar() {
-            // 移除側邊欄切換功能
-        }
-
-        function changeTheme(themeName) {
-            // 移除主題切換功能，只保留自訂顏色
-        }
-
-        function showColorPicker() {
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 class="modal-title">自訂主題顏色</h3>
-                        <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
-                    </div>
-                    
-                    <div class="color-input-group">
-                        <label>主要顏色</label>
-                        <input type="color" class="color-input" id="primary-color" value="${getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim()}">
-                    </div>
-                    
-                    <div class="color-input-group">
-                        <label>次要顏色</label>
-                        <input type="color" class="color-input" id="secondary-color" value="${getComputedStyle(document.documentElement).getPropertyValue('--secondary-color').trim()}">
-                    </div>
-                    
-                    <div class="color-input-group">
-                        <label>強調顏色</label>
-                        <input type="color" class="color-input" id="accent-color" value="${getComputedStyle(document.documentElement).getPropertyValue('--accent-color').trim()}">
-                    </div>
-
-                    <div class="color-input-group">
-                        <label>背景顏色</label>
-                        <input type="color" class="color-input" id="bg-color" value="${getComputedStyle(document.documentElement).getPropertyValue('--bg-color').trim()}">
-                    </div>
-                    
-                    <div class="color-preview">
-                        <div class="color-preview-item" id="preview-primary">主要</div>
-                        <div class="color-preview-item" id="preview-secondary">次要</div>
-                        <div class="color-preview-item" id="preview-accent">強調</div>
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
-                        <button class="btn btn-primary" onclick="applyCustomColors()">套用</button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // 預覽顏色變化
-            const primaryInput = document.getElementById('primary-color');
-            const secondaryInput = document.getElementById('secondary-color');
-            const accentInput = document.getElementById('accent-color');
-            const bgInput = document.getElementById('bg-color');
-            
-            function updatePreview() {
-                document.getElementById('preview-primary').style.backgroundColor = primaryInput.value;
-                document.getElementById('preview-secondary').style.backgroundColor = secondaryInput.value;
-                document.getElementById('preview-accent').style.backgroundColor = accentInput.value;
-            }
-            
-            primaryInput.addEventListener('input', updatePreview);
-            secondaryInput.addEventListener('input', updatePreview);
-            accentInput.addEventListener('input', updatePreview);
-            bgInput.addEventListener('input', updatePreview);
-            
-            updatePreview();
-            
-            // 點擊外部關閉
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-        }
-
-        function applyCustomColors() {
-            const primary = document.getElementById('primary-color').value;
-            const secondary = document.getElementById('secondary-color').value;
-            const accent = document.getElementById('accent-color').value;
-            const bg = document.getElementById('bg-color').value;
-            
-            const root = document.documentElement;
-            root.style.setProperty('--primary-color', primary);
-            root.style.setProperty('--secondary-color', secondary);
-            root.style.setProperty('--accent-color', accent);
-            root.style.setProperty('--bg-color', bg);
-            
-            // 儲存自訂顏色
-            localStorage.setItem('characterCreatorCustomColors', JSON.stringify({
-                primary, secondary, accent, bg
-            }));
-            
-            document.querySelector('.modal').remove();
-        }
-
-        function saveData() {
-            try {
-                localStorage.setItem('characterCreatorData', JSON.stringify(characters));
-                // 靜默儲存
-            } catch (error) {
-                console.error('儲存失敗：', error);
-            }
-        }
-
-        function showSaveNotification() {
-            // 創建儲存成功提示
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: var(--success-color);
-                color: white;
-                padding: 12px 20px;
-                border-radius: 6px;
-                font-size: 0.9em;
-                font-weight: 500;
-                z-index: 9999;
-                box-shadow: var(--shadow-medium);
-                transform: translateX(100%);
-                transition: transform 0.3s ease;
-            `;
-            notification.textContent = '✓ 已儲存到瀏覽器';
-            
-            document.body.appendChild(notification);
-            
-            // 滑入動畫
-            setTimeout(() => {
-                notification.style.transform = 'translateX(0)';
-            }, 10);
-            
-            // 3秒後移除
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 2000);
-        }
-
-        function exportAllData() {
-            const exportData = {
-                characters: characters,
-                exportDate: new Date().toISOString(),
-                version: '1.0.0'
-            };
-            
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `chronicler_backup_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function importAllData() {
-            document.getElementById('importAllFile').click();
-        }
-
-        function handleImportAll(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    
-                    if (data.characters && Array.isArray(data.characters)) {
-                        const confirmImport = confirm(`確定要匯入 ${data.characters.length} 個角色嗎？這將覆蓋現有的所有資料！`);
-                        
-                        if (confirmImport) {
-                            characters = data.characters;
-                            currentCharacterId = characters[0]?.id || null;
-                            currentVersionId = characters[0]?.versions[0]?.id || null;
-                            compareVersions = [];
-                            
-                            renderAll();
-                            saveData();
-                            alert('資料匯入成功！');
-                        }
-                    } else {
-                        alert('檔案格式不正確，請選擇有效的備份檔案');
-                    }
-                } catch (error) {
-                    alert('檔案讀取失敗：' + error.message);
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function loadData() {
-            try {
-                const saved = localStorage.getItem('characterCreatorData');
-                if (saved) {
-                    characters = JSON.parse(saved);
-                    if (characters.length > 0) {
-                        currentCharacterId = characters[0].id;
-                        currentVersionId = characters[0].versions[0].id;
-                    }
-                }
-            } catch (error) {
-                console.error('載入資料失敗：', error);
-            }
-        }
-
-        function addCharacter() {
-            const character = {
-                id: generateId(),
-                name: `角色 ${characters.length + 1}`,
-                versions: [{
-                    id: generateId(),
-                    name: '版本 1',
-                    avatar: '',
-                    description: '',
-                    personality: '',
-                    scenario: '',
-                    dialogue: '',
-                    firstMessage: '',
-                    creator: '',
-                    charVersion: '',
-                    creatorNotes: '',
-                    tags: ''
-                }]
-            };
-            characters.push(character);
-            currentCharacterId = character.id;
-            currentVersionId = character.versions[0].id;
-            renderAll();
-            saveData();
-        }
-
-        function removeCharacter(characterId) {
-            if (characters.length <= 1) {
-                alert('至少需要保留一個角色');
-                return;
-            }
-            characters = characters.filter(c => c.id !== characterId);
-            if (currentCharacterId === characterId) {
-                currentCharacterId = characters[0]?.id || null;
-                currentVersionId = characters[0]?.versions[0]?.id || null;
-            }
-            renderAll();
-            saveData();
-        }
-
-        function addVersion(characterId) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const newVersion = {
-                    id: generateId(),
-                    name: `版本 ${character.versions.length + 1}`,
-                    avatar: '',
-                    description: '',
-                    personality: '',
-                    scenario: '',
-                    dialogue: '',
-                    firstMessage: '',
-                    creator: '',
-                    charVersion: '',
-                    creatorNotes: '',
-                    tags: ''
-                };
-                character.versions.push(newVersion);
-                currentVersionId = newVersion.id;
-                renderAll();
-                saveData();
-            }
-        }
-
-        function removeVersion(characterId, versionId) {
-            const character = characters.find(c => c.id === characterId);
-            if (character && character.versions.length > 1) {
-                character.versions = character.versions.filter(v => v.id !== versionId);
-                if (currentVersionId === versionId) {
-                    currentVersionId = character.versions[0].id;
-                }
-                renderAll();
-                saveData();
-            } else {
-                alert('至少需要保留一個版本');
-            }
-        }
-
-        function selectCharacter(characterId) {
-            currentCharacterId = characterId;
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                currentVersionId = character.versions[0].id;
-            }
-            renderAll();
-        }
-
-        function selectVersion(characterId, versionId) {
-            currentCharacterId = characterId;
-            currentVersionId = versionId;
-            viewMode = 'single';
-            renderAll();
-        }
-
-        function toggleCompareMode() {
-            if (viewMode === 'single') {
-                const currentCharacter = characters.find(c => c.id === currentCharacterId);
-                if (currentCharacter && currentCharacter.versions.length > 1) {
-                    showVersionSelector();
-                } else {
-                    alert('需要至少2個版本才能進行對比');
-                }
-            } else {
-                viewMode = 'single';
-                compareVersions = [];
-                renderAll();
-            }
-        }
-
-        function showVersionSelector() {
-            const currentCharacter = characters.find(c => c.id === currentCharacterId);
-            if (!currentCharacter) return;
-
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 class="modal-title">選擇要對比的版本</h3>
-                        <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
-                    </div>
-                    
-                    <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9em;">選擇2-3個版本進行對比 (目前已選: <span id="selected-count">0</span>/3)</p>
-                    
-                    <div class="version-checkboxes">
-                        ${currentCharacter.versions.map(version => `
-                            <div class="version-checkbox" data-version-id="${version.id}" onclick="toggleVersionSelection('${version.id}')">
-                                <input type="checkbox" id="check-${version.id}" onchange="event.stopPropagation()">
-                                <label for="check-${version.id}">${version.name}</label>
-                            </div>
-                        `).join('')}
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
-                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
-                        <button class="btn btn-primary" onclick="applyVersionComparison()" id="apply-compare" disabled>開始對比</button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // 恢復之前的選擇
-            compareVersions.forEach(versionId => {
-                const checkbox = document.getElementById(`check-${versionId}`);
-                const container = document.querySelector(`[data-version-id="${versionId}"]`);
-                if (checkbox && container) {
-                    checkbox.checked = true;
-                    container.classList.add('selected');
-                }
-            });
-            updateSelectedCount();
-            
-            // 點擊外部關閉
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-        }
-
-        function toggleVersionSelection(versionId) {
-            const checkbox = document.getElementById(`check-${versionId}`);
-            const container = document.querySelector(`[data-version-id="${versionId}"]`);
-            
-            if (checkbox.checked) {
-                // 取消選擇
-                checkbox.checked = false;
-                container.classList.remove('selected');
-                compareVersions = compareVersions.filter(id => id !== versionId);
-            } else {
-                // 新增選擇
-                if (compareVersions.length < 3) {
-                    checkbox.checked = true;
-                    container.classList.add('selected');
-                    compareVersions.push(versionId);
-                } else {
-                    alert('最多只能選擇3個版本');
-                }
-            }
-            
-            updateSelectedCount();
-        }
-
-        function updateSelectedCount() {
-            const countElement = document.getElementById('selected-count');
-            const applyButton = document.getElementById('apply-compare');
-            
-            if (countElement) {
-                countElement.textContent = compareVersions.length;
-            }
-            
-            if (applyButton) {
-                applyButton.disabled = compareVersions.length < 2;
-            }
-        }
-
-        function applyVersionComparison() {
-            if (compareVersions.length >= 2) {
-                viewMode = 'compare';
-                document.querySelector('.modal').remove();
-                renderAll();
-            }
-        }
-
-        function updateField(characterId, versionId, field, value) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const version = character.versions.find(v => v.id === versionId);
-                if (version) {
-                    version[field] = value;
-                    updateStats();
-                    saveData();
-                }
-            }
-        }
-
-        function updateCharacterName(characterId, name) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                character.name = name;
-                renderSidebar();
-                saveData();
-            }
-        }
-
-        function updateVersionName(characterId, versionId, name) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const version = character.versions.find(v => v.id === versionId);
-                if (version) {
-                    version.name = name;
-                    renderSidebar();
-                    saveData();
-                }
-            }
-        }
-
-        function handleImageUpload(characterId, versionId, file) {
-            if (file) {
-                showImageCropModal(file, function(croppedImageData) {
-                    updateField(characterId, versionId, 'avatar', croppedImageData);
-                    renderContent();
-                });
-            }
-        }
-
-        function showImageCropModal(file, callback) {
-            const modal = document.createElement('div');
-            modal.className = 'crop-modal';
-            modal.style.display = 'block';
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                modal.innerHTML = `
-                    <div class="crop-modal-content">
-                        <div class="modal-header">
-                            <h3 class="modal-title">裁剪圖片</h3>
-                            <button class="close-modal" onclick="this.closest('.crop-modal').remove()">×</button>
-                        </div>
-                        
-                        <div class="crop-info">
-                            拖拽選擇框來調整裁剪區域。圖片將被裁剪為 2:3 比例（寬:高）
-                        </div>
-                        
-                        <div class="crop-container" id="cropContainer">
-                            <img class="crop-image" id="cropImage" src="${e.target.result}" alt="待裁剪圖片">
-                            <div class="crop-overlay" id="cropOverlay">
-                                <div class="crop-handle nw"></div>
-                                <div class="crop-handle ne"></div>
-                                <div class="crop-handle sw"></div>
-                                <div class="crop-handle se"></div>
-                            </div>
-                        </div>
-                        
-                        <div class="crop-controls">
-                            <button class="btn btn-secondary" onclick="resetCropArea()">重置</button>
-                            <button class="btn btn-secondary" onclick="this.closest('.crop-modal').remove()">取消</button>
-                            <button class="btn btn-primary" onclick="applyCrop()">確認裁剪</button>
-                        </div>
-                    </div>
-                `;
-                
-                document.body.appendChild(modal);
-                
-                // 等待圖片載入完成後初始化裁剪區域
-                const img = document.getElementById('cropImage');
-                img.onload = function() {
-                    initializeCropArea();
-                };
-                
-                // 如果圖片已經載入，直接初始化
-                if (img.complete) {
-                    initializeCropArea();
-                }
-                
-                // 儲存回調函數
-                window.currentCropCallback = callback;
-                
-                // 點擊外部關閉
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        modal.remove();
-                    }
-                });
-            };
-            
-            reader.readAsDataURL(file);
-        }
-
-        function initializeCropArea() {
-            const container = document.getElementById('cropContainer');
-            const img = document.getElementById('cropImage');
-            const overlay = document.getElementById('cropOverlay');
-            
-            const containerRect = container.getBoundingClientRect();
-            const imgRect = img.getBoundingClientRect();
-            
-            // 計算圖片在容器中的實際尺寸和位置
-            const imgWidth = img.offsetWidth;
-            const imgHeight = img.offsetHeight;
-            
-            // 設定初始裁剪區域（2:3比例，居中）
-            let cropWidth, cropHeight;
-            if (imgWidth / imgHeight > 2/3) {
-                // 圖片較寬，以高度為準
-                cropHeight = imgHeight * 0.8;
-                cropWidth = cropHeight * (2/3);
-            } else {
-                // 圖片較高，以寬度為準
-                cropWidth = imgWidth * 0.8;
-                cropHeight = cropWidth * (3/2);
-            }
-            
-            const cropX = (imgWidth - cropWidth) / 2;
-            const cropY = (imgHeight - cropHeight) / 2;
-            
-            overlay.style.left = cropX + 'px';
-            overlay.style.top = cropY + 'px';
-            overlay.style.width = cropWidth + 'px';
-            overlay.style.height = cropHeight + 'px';
-            
-            // 添加拖拽功能
-            addCropInteraction();
-        }
-
-        function addCropInteraction() {
-            const overlay = document.getElementById('cropOverlay');
-            const container = document.getElementById('cropContainer');
-            const img = document.getElementById('cropImage');
-            
-            let isDragging = false;
-            let isResizing = false;
-            let startX, startY, startLeft, startTop, startWidth, startHeight;
-            let resizeHandle = null;
-            
-            // 拖拽移動
-            overlay.addEventListener('mousedown', function(e) {
-                if (e.target.classList.contains('crop-handle')) {
-                    isResizing = true;
-                    resizeHandle = e.target.classList[1]; // nw, ne, sw, se
-                } else {
-                    isDragging = true;
-                }
-                
-                startX = e.clientX;
-                startY = e.clientY;
-                startLeft = parseInt(overlay.style.left);
-                startTop = parseInt(overlay.style.top);
-                startWidth = parseInt(overlay.style.width);
-                startHeight = parseInt(overlay.style.height);
-                
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', function(e) {
-                if (!isDragging && !isResizing) return;
-                
-                const deltaX = e.clientX - startX;
-                const deltaY = e.clientY - startY;
-                
-                if (isDragging) {
-                    let newLeft = startLeft + deltaX;
-                    let newTop = startTop + deltaY;
-                    
-                    // 限制在圖片範圍內
-                    newLeft = Math.max(0, Math.min(newLeft, img.offsetWidth - startWidth));
-                    newTop = Math.max(0, Math.min(newTop, img.offsetHeight - startHeight));
-                    
-                    overlay.style.left = newLeft + 'px';
-                    overlay.style.top = newTop + 'px';
-                } else if (isResizing) {
-                    let newWidth = startWidth;
-                    let newHeight = startHeight;
-                    let newLeft = startLeft;
-                    let newTop = startTop;
-                    
-                    // 根據拖拽的角度調整尺寸，保持2:3比例
-                    if (resizeHandle.includes('e')) {
-                        newWidth = startWidth + deltaX;
-                    }
-                    if (resizeHandle.includes('w')) {
-                        newWidth = startWidth - deltaX;
-                        newLeft = startLeft + deltaX;
-                    }
-                    if (resizeHandle.includes('s')) {
-                        newHeight = startHeight + deltaY;
-                    }
-                    if (resizeHandle.includes('n')) {
-                        newHeight = startHeight - deltaY;
-                        newTop = startTop + deltaY;
-                    }
-                    
-                    // 保持2:3比例
-                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                        newHeight = newWidth * (3/2);
-                    } else {
-                        newWidth = newHeight * (2/3);
-                    }
-                    
-                    // 限制最小尺寸
-                    newWidth = Math.max(50, newWidth);
-                    newHeight = Math.max(75, newHeight);
-                    
-                    // 限制在圖片範圍內
-                    if (newLeft + newWidth > img.offsetWidth) {
-                        newWidth = img.offsetWidth - newLeft;
-                        newHeight = newWidth * (3/2);
-                    }
-                    if (newTop + newHeight > img.offsetHeight) {
-                        newHeight = img.offsetHeight - newTop;
-                        newWidth = newHeight * (2/3);
-                    }
-                    if (newLeft < 0) {
-                        newLeft = 0;
-                    }
-                    if (newTop < 0) {
-                        newTop = 0;
-                    }
-                    
-                    overlay.style.width = newWidth + 'px';
-                    overlay.style.height = newHeight + 'px';
-                    overlay.style.left = newLeft + 'px';
-                    overlay.style.top = newTop + 'px';
-                }
-            });
-            
-            document.addEventListener('mouseup', function() {
-                isDragging = false;
-                isResizing = false;
-                resizeHandle = null;
-            });
-        }
-
-        function resetCropArea() {
-            initializeCropArea();
-        }
-
-        function applyCrop() {
-            const img = document.getElementById('cropImage');
-            const overlay = document.getElementById('cropOverlay');
-            
-            const cropX = parseInt(overlay.style.left);
-            const cropY = parseInt(overlay.style.top);
-            const cropWidth = parseInt(overlay.style.width);
-            const cropHeight = parseInt(overlay.style.height);
-            
-            // 計算原始<!DOCTYPE html>
+    </script>
+</body>
+</html><!DOCTYPE html>
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
@@ -1615,19 +1365,15 @@
             background: var(--bg-color);
         }
 
-        /* 側邊欄 - 精簡設計 */
+        /* 側邊欄 */
         .sidebar {
             width: 280px;
+            min-width: 280px;
             background: var(--surface-color);
             border-right: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            transition: transform 0.3s ease;
             box-shadow: var(--shadow-light);
-        }
-
-        .sidebar.collapsed {
-            transform: translateX(-280px);
         }
 
         .sidebar-header {
@@ -1726,13 +1472,15 @@
             border-color: var(--accent-color);
         }
 
-        /* 主要內容區 - 英倫風格 */
+        /* 主要內容區 */
         .main-content {
             flex: 1;
+            min-width: 0;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             background: var(--bg-color);
+            transition: all 0.3s ease;
         }
 
         .header {
@@ -1749,22 +1497,6 @@
             display: flex;
             align-items: center;
             gap: 20px;
-        }
-
-        .toggle-sidebar {
-            background: transparent;
-            color: var(--text-muted);
-            border: 1px solid var(--border-color);
-            padding: 8px 12px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s ease;
-        }
-
-        .toggle-sidebar:hover {
-            background: var(--bg-color);
-            color: var(--text-color);
         }
 
         .app-title-container {
@@ -1824,7 +1556,7 @@
             box-shadow: var(--shadow-light);
         }
 
-        /* 按鈕樣式 - 英倫風格 */
+        /* 按鈕樣式 */
         .btn {
             padding: 8px 16px;
             border: 1px solid var(--border-color);
@@ -1867,12 +1599,6 @@
             background: var(--bg-color);
         }
 
-        .btn-accent {
-            background: var(--accent-color);
-            color: white;
-            border-color: var(--accent-color);
-        }
-
         .btn-success {
             background: var(--success-color);
             color: white;
@@ -1896,7 +1622,7 @@
             font-size: 0.8em;
         }
 
-        /* 版本面板 - 文學編輯器風格 */
+        /* 版本面板 */
         .versions-container {
             display: grid;
             gap: 24px;
@@ -1947,50 +1673,6 @@
             outline: none;
             border-color: var(--primary-color);
             background: var(--bg-color);
-        }
-
-        /* 表單欄位 - 精緻設計 */
-        .field-group {
-            margin-bottom: 24px;
-        }
-
-        .field-label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 500;
-            color: var(--text-color);
-            font-size: 0.9em;
-        }
-
-        .field-stats {
-            font-size: 0.75em;
-            color: var(--text-muted);
-            margin-left: 12px;
-            font-style: italic;
-        }
-
-        .field-input {
-            width: 100%;
-            padding: 12px 16px;
-            border: 1px solid var(--border-color);
-            border-radius: 6px;
-            font-size: 0.9em;
-            font-family: "Noto Serif CJK JP", 'Georgia', serif;
-            transition: all 0.2s ease;
-            background: var(--surface-color);
-            color: var(--text-color);
-            line-height: 1.6;
-        }
-
-        .field-input:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(45, 55, 72, 0.1);
-        }
-
-        textarea.field-input {
-            min-height: 120px;
-            resize: vertical;
         }
 
         /* 角色圖片和資訊區域 */
@@ -2066,6 +1748,50 @@
             box-shadow: 0 0 0 2px rgba(45, 55, 72, 0.1);
         }
 
+        /* 表單欄位 */
+        .field-group {
+            margin-bottom: 24px;
+        }
+
+        .field-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-color);
+            font-size: 0.9em;
+        }
+
+        .field-stats {
+            font-size: 0.75em;
+            color: var(--text-muted);
+            margin-left: 12px;
+            font-style: italic;
+        }
+
+        .field-input {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            font-size: 0.9em;
+            font-family: "Noto Serif CJK JP", 'Georgia', serif;
+            transition: all 0.2s ease;
+            background: var(--surface-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .field-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(45, 55, 72, 0.1);
+        }
+
+        textarea.field-input {
+            min-height: 120px;
+            resize: vertical;
+        }
+
         .file-input {
             display: none;
         }
@@ -2085,31 +1811,6 @@
         .file-label:hover {
             background: transparent;
             color: var(--success-color);
-        }
-
-        /* 底部欄位區域 */
-        .bottom-fields {
-            margin-top: 32px;
-            padding-top: 24px;
-            border-top: 1px solid var(--border-color);
-        }
-
-        .bottom-fields .field-group {
-            margin-bottom: 16px;
-        }
-
-        .bottom-fields .field-input {
-            padding: 8px 12px;
-            font-size: 0.85em;
-        }
-
-        .bottom-fields h4 {
-            margin-bottom: 16px;
-            color: var(--text-muted);
-            font-size: 0.85em;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            font-weight: 600;
         }
 
         /* 匯出區域 */
@@ -2361,52 +2062,8 @@
             font-size: 0.9em;
         }
 
-        /* 主題顏色選擇器 */
-        .theme-selector {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .theme-preset {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
-            border: 2px solid var(--border-color);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-
-        .theme-preset:hover {
-            transform: scale(1.05);
-            box-shadow: var(--shadow-medium);
-        }
-
-        .theme-preset.active {
-            border-color: var(--primary-color);
-            border-width: 3px;
-        }
-
         /* 響應式設計 */
         @media (max-width: 768px) {
-            .sidebar {
-                position: absolute;
-                z-index: 100;
-                width: 280px;
-                transform: translateX(-280px);
-                transition: transform 0.3s ease;
-            }
-            
-            .sidebar.show {
-                transform: translateX(0);
-            }
-
-            .sidebar.collapsed {
-                transform: translateX(-280px);
-                width: 280px;
-            }
-            
             .versions-container.compare-view {
                 grid-template-columns: 1fr;
             }
@@ -2418,15 +2075,18 @@
             .content-area {
                 padding: 16px;
             }
-        }
 
-        /* 預設主題配色 */
-        .theme-classic { background: linear-gradient(135deg, #2d3748, #8b7355); }
-        .theme-warm { background: linear-gradient(135deg, #744210, #d69e2e); }
-        .theme-cool { background: linear-gradient(135deg, #2c5282, #3182ce); }
-        .theme-forest { background: linear-gradient(135deg, #22543d, #38a169); }
-        .theme-vintage { background: linear-gradient(135deg, #553c9a, #9f7aea); }
-        .theme-minimal { background: linear-gradient(135deg, #4a5568, #718096); }
+            .character-info-section {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .avatar-container {
+                width: 100%;
+                max-width: 200px;
+                margin: 0 auto;
+            }
+        }
     </style>
 </head>
 <body>
@@ -2474,19 +2134,9 @@
         let characters = [];
         let currentCharacterId = null;
         let currentVersionId = null;
-        let viewMode = 'single'; // 'single' 或 'compare'
+        let viewMode = 'single';
         let sidebarCollapsed = false;
-        let compareVersions = []; // 用於對比檢視的版本選擇
-
-        // 主題配色 - 英倫風低彩度配色
-        const themes = {
-            classic: { primary: '#2d3748', secondary: '#1a202c', accent: '#8b7355', bg: '#f7f5f3' },
-            warm: { primary: '#744210', secondary: '#553c9a', accent: '#d69e2e', bg: '#fefcf0' },
-            cool: { primary: '#2c5282', secondary: '#2a4365', accent: '#3182ce', bg: '#f0f8ff' },
-            forest: { primary: '#22543d', secondary: '#1a202c', accent: '#38a169', bg: '#f0fff4' },
-            vintage: { primary: '#553c9a', secondary: '#44337a', accent: '#9f7aea', bg: '#faf5ff' },
-            minimal: { primary: '#4a5568', secondary: '#2d3748', accent: '#718096', bg: '#f8f9fa' }
-        };
+        let compareVersions = [];
 
         function generateId() {
             return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -2495,8 +2145,6 @@
         function countTokens(text) {
             if (!text) return 0;
             
-            // 更精準的token計算，模擬GPT-4的BPE tokenizer
-            // 預處理：移除多餘空白
             text = text.trim().replace(/\s+/g, ' ');
             
             let tokenCount = 0;
@@ -2505,12 +2153,10 @@
             while (i < text.length) {
                 const char = text[i];
                 
-                // 中文字符（包括日文、韓文）- 通常是1 token
                 if (/[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(char)) {
                     tokenCount += 1;
                     i++;
                 }
-                // 英文單詞處理
                 else if (/[a-zA-Z]/.test(char)) {
                     let wordStart = i;
                     while (i < text.length && /[a-zA-Z]/.test(text[i])) {
@@ -2518,7 +2164,6 @@
                     }
                     const word = text.slice(wordStart, i);
                     
-                    // 英文單詞的token估算
                     if (word.length <= 3) {
                         tokenCount += 1;
                     } else if (word.length <= 6) {
@@ -2529,19 +2174,15 @@
                         tokenCount += Math.ceil(word.length / 4);
                     }
                 }
-                // 數字處理
                 else if (/[0-9]/.test(char)) {
                     let numStart = i;
                     while (i < text.length && /[0-9.,]/.test(text[i])) {
                         i++;
                     }
                     const num = text.slice(numStart, i);
-                    // 數字通常每2-4位是1個token
                     tokenCount += Math.ceil(num.replace(/[.,]/g, '').length / 3);
                 }
-                // 標點符號和特殊字符
                 else if (/[^\s]/.test(char)) {
-                    // 常見標點符號組合
                     if (i < text.length - 1) {
                         const twoChar = text.slice(i, i + 2);
                         if (['--', '...', '!!', '??', '::'].includes(twoChar)) {
@@ -2551,7 +2192,6 @@
                         }
                     }
                     
-                    // 單個標點符號
                     if (/[.!?,:;()[\]{}"'`~@#$%^&*+=<>|\\/-]/.test(char)) {
                         tokenCount += 0.5;
                     } else {
@@ -2559,28 +2199,17 @@
                     }
                     i++;
                 }
-                // 空白字符
                 else {
-                    // 空格通常不單獨計算token，但會影響分詞
                     i++;
                 }
             }
             
-            // 加上一些特殊格式的額外token（如{{user}}, {{char}}等）
             const specialTokens = text.match(/\{\{(user|char|random|pick|roll)\}\}/g);
             if (specialTokens) {
                 tokenCount += specialTokens.length * 0.5;
             }
             
             return Math.ceil(tokenCount);
-        }
-
-        function toggleSidebar() {
-            // 移除側邊欄切換功能
-        }
-
-        function changeTheme(themeName) {
-            // 移除主題切換功能，只保留自訂顏色
         }
 
         function showColorPicker() {
@@ -2629,1520 +2258,4 @@
             
             document.body.appendChild(modal);
             
-            // 預覽顏色變化
             const primaryInput = document.getElementById('primary-color');
-            const secondaryInput = document.getElementById('secondary-color');
-            const accentInput = document.getElementById('accent-color');
-            const bgInput = document.getElementById('bg-color');
-            
-            function updatePreview() {
-                document.getElementById('preview-primary').style.backgroundColor = primaryInput.value;
-                document.getElementById('preview-secondary').style.backgroundColor = secondaryInput.value;
-                document.getElementById('preview-accent').style.backgroundColor = accentInput.value;
-            }
-            
-            primaryInput.addEventListener('input', updatePreview);
-            secondaryInput.addEventListener('input', updatePreview);
-            accentInput.addEventListener('input', updatePreview);
-            bgInput.addEventListener('input', updatePreview);
-            
-            updatePreview();
-            
-            // 點擊外部關閉
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-        }
-
-        function applyCustomColors() {
-            const primary = document.getElementById('primary-color').value;
-            const secondary = document.getElementById('secondary-color').value;
-            const accent = document.getElementById('accent-color').value;
-            const bg = document.getElementById('bg-color').value;
-            
-            const root = document.documentElement;
-            root.style.setProperty('--primary-color', primary);
-            root.style.setProperty('--secondary-color', secondary);
-            root.style.setProperty('--accent-color', accent);
-            root.style.setProperty('--bg-color', bg);
-            
-            // 儲存自訂顏色
-            localStorage.setItem('characterCreatorCustomColors', JSON.stringify({
-                primary, secondary, accent, bg
-            }));
-            
-            document.querySelector('.modal').remove();
-        }
-
-        function saveData() {
-            try {
-                localStorage.setItem('characterCreatorData', JSON.stringify(characters));
-                // 靜默儲存
-            } catch (error) {
-                console.error('儲存失敗：', error);
-            }
-        }
-
-        function showSaveNotification() {
-            // 創建儲存成功提示
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                background: var(--success-color);
-                color: white;
-                padding: 12px 20px;
-                border-radius: 6px;
-                font-size: 0.9em;
-                font-weight: 500;
-                z-index: 9999;
-                box-shadow: var(--shadow-medium);
-                transform: translateX(100%);
-                transition: transform 0.3s ease;
-            `;
-            notification.textContent = '✓ 已儲存到瀏覽器';
-            
-            document.body.appendChild(notification);
-            
-            // 滑入動畫
-            setTimeout(() => {
-                notification.style.transform = 'translateX(0)';
-            }, 10);
-            
-            // 3秒後移除
-            setTimeout(() => {
-                notification.style.transform = 'translateX(100%)';
-                setTimeout(() => {
-                    if (notification.parentNode) {
-                        notification.parentNode.removeChild(notification);
-                    }
-                }, 300);
-            }, 2000);
-        }
-
-        function exportAllData() {
-            const exportData = {
-                characters: characters,
-                exportDate: new Date().toISOString(),
-                version: '1.0.0'
-            };
-            
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `chronicler_backup_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function importAllData() {
-            document.getElementById('importAllFile').click();
-        }
-
-        function handleImportAll(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const data = JSON.parse(e.target.result);
-                    
-                    if (data.characters && Array.isArray(data.characters)) {
-                        const confirmImport = confirm(`確定要匯入 ${data.characters.length} 個角色嗎？這將覆蓋現有的所有資料！`);
-                        
-                        if (confirmImport) {
-                            characters = data.characters;
-                            currentCharacterId = characters[0]?.id || null;
-                            currentVersionId = characters[0]?.versions[0]?.id || null;
-                            compareVersions = [];
-                            
-                            renderAll();
-                            saveData();
-                            alert('資料匯入成功！');
-                        }
-                    } else {
-                        alert('檔案格式不正確，請選擇有效的備份檔案');
-                    }
-                } catch (error) {
-                    alert('檔案讀取失敗：' + error.message);
-                }
-            };
-            reader.readAsText(file);
-        }
-
-        function loadData() {
-            try {
-                const saved = localStorage.getItem('characterCreatorData');
-                if (saved) {
-                    characters = JSON.parse(saved);
-                    if (characters.length > 0) {
-                        currentCharacterId = characters[0].id;
-                        currentVersionId = characters[0].versions[0].id;
-                    }
-                }
-            } catch (error) {
-                console.error('載入資料失敗：', error);
-            }
-        }
-
-        function addCharacter() {
-            const character = {
-                id: generateId(),
-                name: `角色 ${characters.length + 1}`,
-                versions: [{
-                    id: generateId(),
-                    name: '版本 1',
-                    avatar: '',
-                    description: '',
-                    personality: '',
-                    scenario: '',
-                    dialogue: '',
-                    firstMessage: '',
-                    creator: '',
-                    charVersion: '',
-                    creatorNotes: '',
-                    tags: ''
-                }]
-            };
-            characters.push(character);
-            currentCharacterId = character.id;
-            currentVersionId = character.versions[0].id;
-            renderAll();
-            saveData();
-        }
-
-        function removeCharacter(characterId) {
-            if (characters.length <= 1) {
-                alert('至少需要保留一個角色');
-                return;
-            }
-            characters = characters.filter(c => c.id !== characterId);
-            if (currentCharacterId === characterId) {
-                currentCharacterId = characters[0]?.id || null;
-                currentVersionId = characters[0]?.versions[0]?.id || null;
-            }
-            renderAll();
-            saveData();
-        }
-
-        function addVersion(characterId) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const newVersion = {
-                    id: generateId(),
-                    name: `版本 ${character.versions.length + 1}`,
-                    avatar: '',
-                    description: '',
-                    personality: '',
-                    scenario: '',
-                    dialogue: '',
-                    firstMessage: '',
-                    creator: '',
-                    charVersion: '',
-                    creatorNotes: '',
-                    tags: ''
-                };
-                character.versions.push(newVersion);
-                currentVersionId = newVersion.id;
-                renderAll();
-                saveData();
-            }
-        }
-
-        function removeVersion(characterId, versionId) {
-            const character = characters.find(c => c.id === characterId);
-            if (character && character.versions.length > 1) {
-                character.versions = character.versions.filter(v => v.id !== versionId);
-                if (currentVersionId === versionId) {
-                    currentVersionId = character.versions[0].id;
-                }
-                renderAll();
-                saveData();
-            } else {
-                alert('至少需要保留一個版本');
-            }
-        }
-
-        function selectCharacter(characterId) {
-            currentCharacterId = characterId;
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                currentVersionId = character.versions[0].id;
-            }
-            renderAll();
-        }
-
-        function selectVersion(characterId, versionId) {
-            currentCharacterId = characterId;
-            currentVersionId = versionId;
-            viewMode = 'single';
-            renderAll();
-        }
-
-        function toggleCompareMode() {
-            if (viewMode === 'single') {
-                const currentCharacter = characters.find(c => c.id === currentCharacterId);
-                if (currentCharacter && currentCharacter.versions.length > 1) {
-                    showVersionSelector();
-                } else {
-                    alert('需要至少2個版本才能進行對比');
-                }
-            } else {
-                viewMode = 'single';
-                compareVersions = [];
-                renderAll();
-            }
-        }
-
-        function showVersionSelector() {
-            const currentCharacter = characters.find(c => c.id === currentCharacterId);
-            if (!currentCharacter) return;
-
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h3 class="modal-title">選擇要對比的版本</h3>
-                        <button class="close-modal" onclick="this.closest('.modal').remove()">×</button>
-                    </div>
-                    
-                    <p style="margin-bottom: 16px; color: var(--text-muted); font-size: 0.9em;">選擇2-3個版本進行對比 (目前已選: <span id="selected-count">0</span>/3)</p>
-                    
-                    <div class="version-checkboxes">
-                        ${currentCharacter.versions.map(version => `
-                            <div class="version-checkbox" data-version-id="${version.id}" onclick="toggleVersionSelection('${version.id}')">
-                                <input type="checkbox" id="check-${version.id}" onchange="event.stopPropagation()">
-                                <label for="check-${version.id}">${version.name}</label>
-                            </div>
-                        `).join('')}
-                    </div>
-                    
-                    <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px;">
-                        <button class="btn btn-secondary" onclick="this.closest('.modal').remove()">取消</button>
-                        <button class="btn btn-primary" onclick="applyVersionComparison()" id="apply-compare" disabled>開始對比</button>
-                    </div>
-                </div>
-            `;
-            
-            document.body.appendChild(modal);
-            
-            // 恢復之前的選擇
-            compareVersions.forEach(versionId => {
-                const checkbox = document.getElementById(`check-${versionId}`);
-                const container = document.querySelector(`[data-version-id="${versionId}"]`);
-                if (checkbox && container) {
-                    checkbox.checked = true;
-                    container.classList.add('selected');
-                }
-            });
-            updateSelectedCount();
-            
-            // 點擊外部關閉
-            modal.addEventListener('click', function(e) {
-                if (e.target === modal) {
-                    modal.remove();
-                }
-            });
-        }
-
-        function toggleVersionSelection(versionId) {
-            const checkbox = document.getElementById(`check-${versionId}`);
-            const container = document.querySelector(`[data-version-id="${versionId}"]`);
-            
-            if (checkbox.checked) {
-                // 取消選擇
-                checkbox.checked = false;
-                container.classList.remove('selected');
-                compareVersions = compareVersions.filter(id => id !== versionId);
-            } else {
-                // 新增選擇
-                if (compareVersions.length < 3) {
-                    checkbox.checked = true;
-                    container.classList.add('selected');
-                    compareVersions.push(versionId);
-                } else {
-                    alert('最多只能選擇3個版本');
-                }
-            }
-            
-            updateSelectedCount();
-        }
-
-        function updateSelectedCount() {
-            const countElement = document.getElementById('selected-count');
-            const applyButton = document.getElementById('apply-compare');
-            
-            if (countElement) {
-                countElement.textContent = compareVersions.length;
-            }
-            
-            if (applyButton) {
-                applyButton.disabled = compareVersions.length < 2;
-            }
-        }
-
-        function applyVersionComparison() {
-            if (compareVersions.length >= 2) {
-                viewMode = 'compare';
-                document.querySelector('.modal').remove();
-                renderAll();
-            }
-        }
-
-        function updateField(characterId, versionId, field, value) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const version = character.versions.find(v => v.id === versionId);
-                if (version) {
-                    version[field] = value;
-                    updateStats();
-                    saveData();
-                }
-            }
-        }
-
-        function updateCharacterName(characterId, name) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                character.name = name;
-                renderSidebar();
-                saveData();
-            }
-        }
-
-        function updateVersionName(characterId, versionId, name) {
-            const character = characters.find(c => c.id === characterId);
-            if (character) {
-                const version = character.versions.find(v => v.id === versionId);
-                if (version) {
-                    version.name = name;
-                    renderSidebar();
-                    saveData();
-                }
-            }
-        }
-
-        function handleImageUpload(characterId, versionId, file) {
-            if (file) {
-                showImageCropModal(file, function(croppedImageData) {
-                    updateField(characterId, versionId, 'avatar', croppedImageData);
-                    renderContent();
-                });
-            }
-        }
-
-        function showImageCropModal(file, callback) {
-            const modal = document.createElement('div');
-            modal.className = 'crop-modal';
-            modal.style.display = 'block';
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                modal.innerHTML = `
-                    <div class="crop-modal-content">
-                        <div class="modal-header">
-                            <h3 class="modal-title">裁剪圖片</h3>
-                            <button class="close-modal" onclick="this.closest('.crop-modal').remove()">×</button>
-                        </div>
-                        
-                        <div class="crop-info">
-                            拖拽選擇框來調整裁剪區域。圖片將被裁剪為 2:3 比例（寬:高）
-                        </div>
-                        
-                        <div class="crop-container" id="cropContainer">
-                            <img class="crop-image" id="cropImage" src="${e.target.result}" alt="待裁剪圖片">
-                            <div class="crop-overlay" id="cropOverlay">
-                                <div class="crop-handle nw"></div>
-                                <div class="crop-handle ne"></div>
-                                <div class="crop-handle sw"></div>
-                                <div class="crop-handle se"></div>
-                            </div>
-                        </div>
-                        
-                        <div class="crop-controls">
-                            <button class="btn btn-secondary" onclick="resetCropArea()">重置</button>
-                            <button class="btn btn-secondary" onclick="this.closest('.crop-modal').remove()">取消</button>
-                            <button class="btn btn-primary" onclick="applyCrop()">確認裁剪</button>
-                        </div>
-                    </div>
-                `;
-                
-                document.body.appendChild(modal);
-                
-                // 等待圖片載入完成後初始化裁剪區域
-                const img = document.getElementById('cropImage');
-                img.onload = function() {
-                    initializeCropArea();
-                };
-                
-                // 如果圖片已經載入，直接初始化
-                if (img.complete) {
-                    initializeCropArea();
-                }
-                
-                // 儲存回調函數
-                window.currentCropCallback = callback;
-                
-                // 點擊外部關閉
-                modal.addEventListener('click', function(e) {
-                    if (e.target === modal) {
-                        modal.remove();
-                    }
-                });
-            };
-            
-            reader.readAsDataURL(file);
-        }
-
-        function initializeCropArea() {
-            const container = document.getElementById('cropContainer');
-            const img = document.getElementById('cropImage');
-            const overlay = document.getElementById('cropOverlay');
-            
-            const containerRect = container.getBoundingClientRect();
-            const imgRect = img.getBoundingClientRect();
-            
-            // 計算圖片在容器中的實際尺寸和位置
-            const imgWidth = img.offsetWidth;
-            const imgHeight = img.offsetHeight;
-            
-            // 設定初始裁剪區域（2:3比例，居中）
-            let cropWidth, cropHeight;
-            if (imgWidth / imgHeight > 2/3) {
-                // 圖片較寬，以高度為準
-                cropHeight = imgHeight * 0.8;
-                cropWidth = cropHeight * (2/3);
-            } else {
-                // 圖片較高，以寬度為準
-                cropWidth = imgWidth * 0.8;
-                cropHeight = cropWidth * (3/2);
-            }
-            
-            const cropX = (imgWidth - cropWidth) / 2;
-            const cropY = (imgHeight - cropHeight) / 2;
-            
-            overlay.style.left = cropX + 'px';
-            overlay.style.top = cropY + 'px';
-            overlay.style.width = cropWidth + 'px';
-            overlay.style.height = cropHeight + 'px';
-            
-            // 添加拖拽功能
-            addCropInteraction();
-        }
-
-        function addCropInteraction() {
-            const overlay = document.getElementById('cropOverlay');
-            const container = document.getElementById('cropContainer');
-            const img = document.getElementById('cropImage');
-            
-            let isDragging = false;
-            let isResizing = false;
-            let startX, startY, startLeft, startTop, startWidth, startHeight;
-            let resizeHandle = null;
-            
-            // 拖拽移動
-            overlay.addEventListener('mousedown', function(e) {
-                if (e.target.classList.contains('crop-handle')) {
-                    isResizing = true;
-                    resizeHandle = e.target.classList[1]; // nw, ne, sw, se
-                } else {
-                    isDragging = true;
-                }
-                
-                startX = e.clientX;
-                startY = e.clientY;
-                startLeft = parseInt(overlay.style.left);
-                startTop = parseInt(overlay.style.top);
-                startWidth = parseInt(overlay.style.width);
-                startHeight = parseInt(overlay.style.height);
-                
-                e.preventDefault();
-            });
-            
-            document.addEventListener('mousemove', function(e) {
-                if (!isDragging && !isResizing) return;
-                
-                const deltaX = e.clientX - startX;
-                const deltaY = e.clientY - startY;
-                
-                if (isDragging) {
-                    let newLeft = startLeft + deltaX;
-                    let newTop = startTop + deltaY;
-                    
-                    // 限制在圖片範圍內
-                    newLeft = Math.max(0, Math.min(newLeft, img.offsetWidth - startWidth));
-                    newTop = Math.max(0, Math.min(newTop, img.offsetHeight - startHeight));
-                    
-                    overlay.style.left = newLeft + 'px';
-                    overlay.style.top = newTop + 'px';
-                } else if (isResizing) {
-                    let newWidth = startWidth;
-                    let newHeight = startHeight;
-                    let newLeft = startLeft;
-                    let newTop = startTop;
-                    
-                    // 根據拖拽的角度調整尺寸，保持2:3比例
-                    if (resizeHandle.includes('e')) {
-                        newWidth = startWidth + deltaX;
-                    }
-                    if (resizeHandle.includes('w')) {
-                        newWidth = startWidth - deltaX;
-                        newLeft = startLeft + deltaX;
-                    }
-                    if (resizeHandle.includes('s')) {
-                        newHeight = startHeight + deltaY;
-                    }
-                    if (resizeHandle.includes('n')) {
-                        newHeight = startHeight - deltaY;
-                        newTop = startTop + deltaY;
-                    }
-                    
-                    // 保持2:3比例
-                    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-                        newHeight = newWidth * (3/2);
-                    } else {
-                        newWidth = newHeight * (2/3);
-                    }
-                    
-                    // 限制最小尺寸
-                    newWidth = Math.max(50, newWidth);
-                    newHeight = Math.max(75, newHeight);
-                    
-                    // 限制在圖片範圍內
-                    if (newLeft + newWidth > img.offsetWidth) {
-                        newWidth = img.offsetWidth - newLeft;
-                        newHeight = newWidth * (3/2);
-                    }
-                    if (newTop + newHeight > img.offsetHeight) {
-                        newHeight = img.offsetHeight - newTop;
-                        newWidth = newHeight * (2/3);
-                    }
-                    if (newLeft < 0) {
-                        newLeft = 0;
-                    }
-                    if (newTop < 0) {
-                        newTop = 0;
-                    }
-                    
-                    overlay.style.width = newWidth + 'px';
-                    overlay.style.height = newHeight + 'px';
-                    overlay.style.left = newLeft + 'px';
-                    overlay.style.top = newTop + 'px';
-                }
-            });
-            
-            document.addEventListener('mouseup', function() {
-                isDragging = false;
-                isResizing = false;
-                resizeHandle = null;
-            });
-        }
-
-        function resetCropArea() {
-            initializeCropArea();
-        }
-
-        function applyCrop() {
-            const img = document.getElementById('cropImage');
-            const overlay = document.getElementById('cropOverlay');
-            
-            const cropX = parseInt(overlay.style.left);
-            const cropY = parseInt(overlay.style.top);
-            const cropWidth = parseInt(overlay.style.width);
-            const cropHeight = parseInt(overlay.style.height);
-            
-            // 計算原始圖片的縮放比例
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            // 設定輸出尺寸（保持2:3比例）
-            const outputWidth = 400;
-            const outputHeight = 600;
-            canvas.width = outputWidth;
-            canvas.height = outputHeight;
-            
-            // 計算縮放比例
-            const scaleX = img.naturalWidth / img.offsetWidth;
-            const scaleY = img.naturalHeight / img.offsetHeight;
-            
-            // 繪製裁剪後的圖片
-            ctx.drawImage(
-                img,
-                cropX * scaleX,
-                cropY * scaleY,
-                cropWidth * scaleX,
-                cropHeight * scaleY,
-                0,
-                0,
-                outputWidth,
-                outputHeight
-            );
-            
-            // 轉為base64
-            const croppedImageData = canvas.toDataURL('image/png', 0.9);
-            
-            // 執行回調
-            if (window.currentCropCallback) {
-                window.currentCropCallback(croppedImageData);
-                window.currentCropCallback = null;
-            }
-            
-            // 關閉彈窗
-            document.querySelector('.crop-modal').remove();
-        }
-
-        function updateStats() {
-            const statsElements = document.querySelectorAll('.field-stats');
-            statsElements.forEach(element => {
-                const textareaId = element.dataset.target;
-                const textarea = document.getElementById(textareaId);
-                if (textarea) {
-                    const text = textarea.value;
-                    const charCount = text.length;
-                    const tokenCount = countTokens(text);
-                    element.textContent = `${charCount} 字 / ${tokenCount} tokens`;
-                }
-            });
-
-            // 更新meta欄位的統計
-            const metaElements = document.querySelectorAll('.meta-field-input');
-            metaElements.forEach(element => {
-                const text = element.value;
-                const charCount = text.length;
-                const tokenCount = countTokens(text);
-                // 可以選擇是否顯示meta欄位的統計，這裡先保持簡潔
-            });
-        }
-
-        function renderSidebar() {
-            const container = document.getElementById('sidebarContent');
-            container.innerHTML = characters.map(character => `
-                <div class="character-item">
-                    <div class="character-header ${character.id === currentCharacterId && document.getElementById(`versions-${character.id}`)?.classList.contains('expanded') ? 'expanded' : (character.id === currentCharacterId ? 'active' : '')}" 
-                         onclick="toggleCharacterVersions('${character.id}')">
-                        <span>${character.name}</span>
-                        <span style="font-size: 0.8em; opacity: 0.7;">${character.versions.length}</span>
-                    </div>
-                    <div class="version-list" id="versions-${character.id}">
-                        ${character.versions.map(version => `
-                            <div class="version-item ${version.id === currentVersionId ? 'active' : ''}" 
-                                 onclick="selectVersion('${character.id}', '${version.id}')">
-                                ${version.name}
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function toggleCharacterVersions(characterId) {
-            selectCharacter(characterId);
-            
-            // 切換版本列表的顯示狀態
-            const versionsList = document.getElementById(`versions-${characterId}`);
-            const characterHeader = document.querySelector(`[onclick="toggleCharacterVersions('${characterId}')"]`);
-            
-            if (versionsList && characterHeader) {
-                const isExpanded = versionsList.classList.contains('expanded');
-                
-                // 關閉所有其他展開的版本列表
-                document.querySelectorAll('.version-list').forEach(list => {
-                    list.classList.remove('expanded');
-                });
-                document.querySelectorAll('.character-header').forEach(header => {
-                    header.classList.remove('expanded');
-                });
-                
-                // 切換當前的狀態
-                if (!isExpanded) {
-                    versionsList.classList.add('expanded');
-                    characterHeader.classList.add('expanded');
-                }
-            }
-        }
-
-        function renderContent() {
-            const container = document.getElementById('contentArea');
-            const currentCharacter = characters.find(c => c.id === currentCharacterId);
-            
-            if (!currentCharacter) {
-                container.innerHTML = '<div style="text-align: center; padding: 80px; color: var(--text-muted);">請選擇一個角色</div>';
-                return;
-            }
-
-            const versionsToShow = viewMode === 'compare' ? 
-                currentCharacter.versions.filter(v => compareVersions.includes(v.id)) : 
-                currentCharacter.versions.filter(v => v.id === currentVersionId);
-
-            container.innerHTML = `
-                <div class="view-controls">
-                    <button class="btn ${viewMode === 'single' ? 'btn-primary' : 'btn-secondary'}" onclick="viewMode='single'; compareVersions=[]; renderAll()">單一檢視</button>
-                    <button class="btn ${viewMode === 'compare' ? 'btn-primary' : 'btn-secondary'}" onclick="toggleCompareMode()">
-                        ${viewMode === 'compare' ? `對比檢視 (${compareVersions.length})` : '對比檢視'}
-                    </button>
-                    <button class="btn btn-secondary" onclick="addVersion('${currentCharacter.id}')">新增版本</button>
-                    <input type="text" class="field-input" style="width: 200px; margin: 0;" value="${currentCharacter.name}" 
-                           onchange="updateCharacterName('${currentCharacter.id}', this.value)" placeholder="角色名稱">
-                    <button class="btn btn-danger btn-small" onclick="removeCharacter('${currentCharacter.id}')">刪除角色</button>
-                </div>
-
-                <div class="stats-bar">
-                    <div class="total-stats" style="font-weight: 500; color: var(--text-color);">
-                        總計 - <span id="total-chars">0</span> 字 / <span id="total-tokens">0</span> tokens
-                    </div>
-                </div>
-
-                <div class="versions-container ${viewMode}-view">
-                    ${versionsToShow.map(version => renderVersionPanel(currentCharacter, version)).join('')}
-                </div>
-
-                <div class="export-section">
-                    <h3>匯出角色卡</h3>
-                    <div class="export-buttons">
-                        <button class="btn btn-warning" onclick="exportJSON('${currentCharacter.id}')">匯出 JSON</button>
-                        <button class="btn btn-warning" onclick="exportPNG('${currentCharacter.id}')">匯出 PNG</button>
-                        <button class="btn btn-warning" onclick="exportAllVersions('${currentCharacter.id}')">匯出所有版本</button>
-                    </div>
-                </div>
-            `;
-
-            setTimeout(updateStats, 100);
-        }
-
-        function renderVersionPanel(character, version) {
-            return `
-                <div class="version-panel">
-                    <div class="version-header">
-                        <input type="text" class="version-title" value="${version.name}" 
-                               onchange="updateVersionName('${character.id}', '${version.id}', this.value)">
-                        <div style="display: flex; gap: 8px;">
-                            <button class="btn btn-success btn-small" onclick="saveData(); showSaveNotification()">💾 儲存</button>
-                            ${character.versions.length > 1 ? `<button class="btn btn-danger btn-small" onclick="removeVersion('${character.id}', '${version.id}')">刪除</button>` : ''}
-                        </div>
-                    </div>
-
-                    <div class="character-info-section">
-                        <div class="avatar-container">
-                            <div class="avatar-display">
-                                ${version.avatar ? 
-                                    `<img src="${version.avatar}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" alt="角色圖片">` : 
-                                    '<span>無圖片</span>'
-                                }
-                                <div class="avatar-upload-overlay">
-                                    <label class="file-label">
-                                        選擇圖片
-                                        <input type="file" class="file-input" accept="image/*" 
-                                               onchange="handleImageUpload('${character.id}', '${version.id}', this.files[0])">
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="character-meta-fields">
-                            <div class="meta-field-group">
-                                <label class="meta-field-label">創作者</label>
-                                <input type="text" class="meta-field-input" id="creator-${version.id}" 
-                                       placeholder="創作者名稱（可選）..."
-                                       oninput="updateField('${character.id}', '${version.id}', 'creator', this.value); updateStats()" 
-                                       value="${version.creator || ''}">
-                            </div>
-
-                            <div class="meta-field-group">
-                                <label class="meta-field-label">角色版本</label>
-                                <input type="text" class="meta-field-input" id="charVersion-${version.id}" 
-                                       placeholder="版本號碼或描述（可選）..."
-                                       oninput="updateField('${character.id}', '${version.id}', 'charVersion', this.value); updateStats()" 
-                                       value="${version.charVersion || ''}">
-                            </div>
-
-                            <div class="meta-field-group">
-                                <label class="meta-field-label">創作者備註</label>
-                                <input type="text" class="meta-field-input" id="creatorNotes-${version.id}" 
-                                       placeholder="創作備註或說明（可選）..."
-                                       oninput="updateField('${character.id}', '${version.id}', 'creatorNotes', this.value); updateStats()" 
-                                       value="${version.creatorNotes || ''}">
-                            </div>
-
-                            <div class="meta-field-group">
-                                <label class="meta-field-label">嵌入標籤</label>
-                                <input type="text" class="meta-field-input" id="tags-${version.id}" 
-                                       placeholder="標籤，用逗號分隔（可選）..."
-                                       oninput="updateField('${character.id}', '${version.id}', 'tags', this.value); updateStats()" 
-                                       value="${version.tags || ''}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            角色描述
-                            <span class="field-stats" data-target="desc-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="desc-${version.id}" 
-                                  placeholder="描述角色的外貌、背景、設定等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'description', this.value); updateStats()">${version.description}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            個性摘要
-                            <span class="field-stats" data-target="personality-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="personality-${version.id}" 
-                                  placeholder="角色的性格特徵、行為模式、說話方式等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'personality', this.value); updateStats()">${version.personality}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            場景設想
-                            <span class="field-stats" data-target="scenario-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="scenario-${version.id}" 
-                                  placeholder="角色所處的情境、環境、當前狀況等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'scenario', this.value); updateStats()">${version.scenario}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            對話範例
-                            <span class="field-stats" data-target="dialogue-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="dialogue-${version.id}" 
-                                  placeholder="{{user}}: 你好！\n{{char}}: 你好呀！很高興見到你～"
-                                  oninput="updateField('${character.id}', '${version.id}', 'dialogue', this.value); updateStats()">${version.dialogue}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            初始訊息
-                            <span class="field-stats" data-target="firstmsg-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="firstmsg-${version.id}" 
-                                  placeholder="角色的第一句話或開場白..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'firstMessage', this.value); updateStats()">${version.firstMessage}</textarea>
-                    </div>
-                </div>
-            `;
-        } class="file-input" accept="image/*" 
-                                       onchange="handleImageUpload('${character.id}', '${version.id}', this.files[0])">
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            角色描述
-                            <span class="field-stats" data-target="desc-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="desc-${version.id}" 
-                                  placeholder="描述角色的外貌、背景、設定等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'description', this.value); updateStats()">${version.description}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            個性摘要
-                            <span class="field-stats" data-target="personality-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="personality-${version.id}" 
-                                  placeholder="角色的性格特徵、行為模式、說話方式等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'personality', this.value); updateStats()">${version.personality}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            場景設想
-                            <span class="field-stats" data-target="scenario-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="scenario-${version.id}" 
-                                  placeholder="角色所處的情境、環境、當前狀況等..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'scenario', this.value); updateStats()">${version.scenario}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            對話範例
-                            <span class="field-stats" data-target="dialogue-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="dialogue-${version.id}" 
-                                  placeholder="{{user}}: 你好！\n{{char}}: 你好呀！很高興見到你～"
-                                  oninput="updateField('${character.id}', '${version.id}', 'dialogue', this.value); updateStats()">${version.dialogue}</textarea>
-                    </div>
-
-                    <div class="field-group">
-                        <label class="field-label">
-                            初始訊息
-                            <span class="field-stats" data-target="firstmsg-${version.id}">0 字 / 0 tokens</span>
-                        </label>
-                        <textarea class="field-input" id="firstmsg-${version.id}" 
-                                  placeholder="角色的第一句話或開場白..."
-                                  oninput="updateField('${character.id}', '${version.id}', 'firstMessage', this.value); updateStats()">${version.firstMessage}</textarea>
-                    </div>
-
-                    <div class="bottom-fields">
-                        <h4>附加資訊</h4>
-                        
-                        <div class="field-group">
-                            <label class="field-label">
-                                創作者
-                                <span class="field-stats" data-target="creator-${version.id}">0 字 / 0 tokens</span>
-                            </label>
-                            <input type="text" class="field-input" id="creator-${version.id}" 
-                                   placeholder="創作者名稱（可選）..."
-                                   oninput="updateField('${character.id}', '${version.id}', 'creator', this.value); updateStats()" 
-                                   value="${version.creator || ''}">
-                        </div>
-
-                        <div class="field-group">
-                            <label class="field-label">
-                                角色版本
-                                <span class="field-stats" data-target="charVersion-${version.id}">0 字 / 0 tokens</span>
-                            </label>
-                            <input type="text" class="field-input" id="charVersion-${version.id}" 
-                                   placeholder="版本號碼或描述（可選）..."
-                                   oninput="updateField('${character.id}', '${version.id}', 'charVersion', this.value); updateStats()" 
-                                   value="${version.charVersion || ''}">
-                        </div>
-
-                        <div class="field-group">
-                            <label class="field-label">
-                                創作者備註
-                                <span class="field-stats" data-target="creatorNotes-${version.id}">0 字 / 0 tokens</span>
-                            </label>
-                            <input type="text" class="field-input" id="creatorNotes-${version.id}" 
-                                   placeholder="創作備註或說明（可選）..."
-                                   oninput="updateField('${character.id}', '${version.id}', 'creatorNotes', this.value); updateStats()" 
-                                   value="${version.creatorNotes || ''}">
-                        </div>
-
-                        <div class="field-group">
-                            <label class="field-label">
-                                嵌入標籤
-                                <span class="field-stats" data-target="tags-${version.id}">0 字 / 0 tokens</span>
-                            </label>
-                            <input type="text" class="field-input" id="tags-${version.id}" 
-                                   placeholder="標籤，用逗號分隔（可選）..."
-                                   oninput="updateField('${character.id}', '${version.id}', 'tags', this.value); updateStats()" 
-                                   value="${version.tags || ''}">
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function renderAll() {
-            renderSidebar();
-            renderContent();
-            updateTotalStats();
-        }
-
-        function updateTotalStats() {
-            const currentCharacter = characters.find(c => c.id === currentCharacterId);
-            if (!currentCharacter) return;
-
-            let totalChars = 0;
-            let totalTokens = 0;
-            
-            const versionsToCount = viewMode === 'compare' ? 
-                currentCharacter.versions.filter(v => compareVersions.includes(v.id)) : 
-                currentCharacter.versions.filter(v => v.id === currentVersionId);
-
-            versionsToCount.forEach(version => {
-                const allText = [
-                    version.description, version.personality, version.scenario, 
-                    version.dialogue, version.firstMessage, version.creator, 
-                    version.charVersion, version.creatorNotes, version.tags
-                ].join(' ');
-                totalChars += allText.length;
-                totalTokens += countTokens(allText);
-            });
-
-            const charsElement = document.getElementById('total-chars');
-            const tokensElement = document.getElementById('total-tokens');
-            if (charsElement) charsElement.textContent = totalChars;
-            if (tokensElement) tokensElement.textContent = totalTokens;
-        }
-
-        function exportJSON(characterId) {
-            const character = characters.find(c => c.id === characterId);
-            if (!character) return;
-
-            if (character.versions.length === 1) {
-                downloadJSON(character, character.versions[0]);
-            } else {
-                const versionIndex = prompt(`選擇要匯出的版本 (1-${character.versions.length}):`);
-                const index = parseInt(versionIndex) - 1;
-                if (index >= 0 && index < character.versions.length) {
-                    downloadJSON(character, character.versions[index]);
-                }
-            }
-        }
-
-        function downloadJSON(character, version) {
-            const characterData = {
-                name: character.name,
-                description: version.description,
-                personality: version.personality,
-                scenario: version.scenario,
-                first_mes: version.firstMessage,
-                mes_example: version.dialogue,
-                creatorcomment: version.creatorNotes,
-                avatar: "none",
-                talkativeness: "0.5",
-                fav: false,
-                tags: version.tags ? version.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-                spec: "chara_card_v3",
-                spec_version: "3.0",
-                data: {
-                    name: character.name,
-                    description: version.description,
-                    personality: version.personality,
-                    scenario: version.scenario,
-                    first_mes: version.firstMessage,
-                    mes_example: version.dialogue,
-                    creator_notes: version.creatorNotes,
-                    system_prompt: "",
-                    post_history_instructions: "",
-                    tags: version.tags ? version.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-                    creator: version.creator,
-                    character_version: version.charVersion,
-                    alternate_greetings: [],
-                    extensions: {
-                        talkativeness: "0.5",
-                        fav: false,
-                        world: "",
-                        depth_prompt: {
-                            prompt: "",
-                            depth: 4,
-                            role: "system"
-                        }
-                    },
-                    group_only_greetings: []
-                },
-                create_date: new Date().toLocaleString('zh-TW', {
-                    year: 'numeric',
-                    month: 'numeric', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                }).replace(/\//g, '-').replace(',', ' @').replace(/:/g, 'h ').replace(/(\d+)$/, '$1s') + ' ' + new Date().getMilliseconds() + 'ms'
-            };
-
-            const blob = new Blob([JSON.stringify(characterData, null, 4)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${character.name}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        }
-
-        function exportPNG(characterId) {
-            const character = characters.find(c => c.id === characterId);
-            if (!character) return;
-
-            // 選擇版本
-            let selectedVersion;
-            if (character.versions.length === 1) {
-                selectedVersion = character.versions[0];
-            } else {
-                const versionIndex = prompt(`選擇要匯出的版本 (1-${character.versions.length}):`);
-                const index = parseInt(versionIndex) - 1;
-                if (index >= 0 && index < character.versions.length) {
-                    selectedVersion = character.versions[index];
-                } else {
-                    return;
-                }
-            }
-
-            // 創建與JSON相同的資料結構
-            const characterData = {
-                name: character.name,
-                description: selectedVersion.description,
-                personality: selectedVersion.personality,
-                scenario: selectedVersion.scenario,
-                first_mes: selectedVersion.firstMessage,
-                mes_example: selectedVersion.dialogue,
-                creatorcomment: selectedVersion.creatorNotes,
-                avatar: "none",
-                talkativeness: "0.5",
-                fav: false,
-                tags: selectedVersion.tags ? selectedVersion.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-                spec: "chara_card_v3",
-                spec_version: "3.0",
-                data: {
-                    name: character.name,
-                    description: selectedVersion.description,
-                    personality: selectedVersion.personality,
-                    scenario: selectedVersion.scenario,
-                    first_mes: selectedVersion.firstMessage,
-                    mes_example: selectedVersion.dialogue,
-                    creator_notes: selectedVersion.creatorNotes,
-                    system_prompt: "",
-                    post_history_instructions: "",
-                    tags: selectedVersion.tags ? selectedVersion.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
-                    creator: selectedVersion.creator,
-                    character_version: selectedVersion.charVersion,
-                    alternate_greetings: [],
-                    extensions: {
-                        talkativeness: "0.5",
-                        fav: false,
-                        world: "",
-                        depth_prompt: {
-                            prompt: "",
-                            depth: 4,
-                            role: "system"
-                        }
-                    },
-                    group_only_greetings: []
-                },
-                create_date: new Date().toLocaleString('zh-TW', {
-                    year: 'numeric',
-                    month: 'numeric', 
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                }).replace(/\//g, '-').replace(',', ' @').replace(/:/g, 'h ').replace(/(\d+)$/, '$1s') + ' ' + new Date().getMilliseconds() + 'ms'
-            };
-
-            // 將JSON轉為Base64
-            const jsonString = JSON.stringify(characterData);
-            const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
-
-            // 創建或使用現有的頭像圖片
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            
-            if (selectedVersion.avatar) {
-                // 如果有頭像，使用頭像作為PNG圖片
-                const img = new Image();
-                img.onload = function() {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // 嵌入chara metadata並下載
-                    createPNGWithMetadata(canvas, base64Data, character.name);
-                };
-                img.src = selectedVersion.avatar;
-            } else {
-                // 如果沒有頭像，創建預設圖片
-                canvas.width = 400;
-                canvas.height = 600;
-                
-                // 創建漸層背景
-                const gradient = ctx.createLinearGradient(0, 0, 0, 600);
-                gradient.addColorStop(0, '#f7f5f3');
-                gradient.addColorStop(1, '#e2e8f0');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(0, 0, 400, 600);
-                
-                // 添加角色名稱
-                ctx.fillStyle = '#2d3748';
-                ctx.font = 'bold 24px "Noto Serif CJK JP", serif';
-                ctx.textAlign = 'center';
-                ctx.fillText(character.name, 200, 300);
-                
-                // 添加副標題
-                ctx.font = '16px "Noto Serif CJK JP", serif';
-                ctx.fillStyle = '#718096';
-                ctx.fillText('Character Card', 200, 330);
-                
-                // 嵌入chara metadata並下載
-                createPNGWithMetadata(canvas, base64Data, character.name);
-            }
-        }
-
-        function createPNGWithMetadata(canvas, base64Data, characterName) {
-            // 將Canvas轉為ImageData
-            canvas.toBlob(function(blob) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const arrayBuffer = e.target.result;
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    
-                    // 在PNG中嵌入tEXt chunk with "chara" keyword
-                    const modifiedPNG = addTextChunkToPNG(uint8Array, 'chara', base64Data);
-                    
-                    // 下載修改後的PNG
-                    const modifiedBlob = new Blob([modifiedPNG], { type: 'image/png' });
-                    const url = URL.createObjectURL(modifiedBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `${characterName}.png`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                };
-                reader.readAsArrayBuffer(blob);
-            }, 'image/png');
-        }
-
-        function addTextChunkToPNG(pngData, keyword, text) {
-            // PNG檔案結構：8位元組PNG簽名 + 數個chunks + IEND chunk
-            const signature = pngData.slice(0, 8);
-            let pos = 8;
-            const chunks = [];
-            
-            // 讀取所有現有的chunks
-            while (pos < pngData.length) {
-                const length = (pngData[pos] << 24) | (pngData[pos + 1] << 16) | (pngData[pos + 2] << 8) | pngData[pos + 3];
-                const type = String.fromCharCode(pngData[pos + 4], pngData[pos + 5], pngData[pos + 6], pngData[pos + 7]);
-                const chunkData = pngData.slice(pos, pos + 12 + length);
-                
-                chunks.push(chunkData);
-                
-                if (type === 'IEND') break;
-                pos += 12 + length;
-            }
-            
-            // 創建tEXt chunk
-            const keywordBytes = new TextEncoder().encode(keyword);
-            const textBytes = new TextEncoder().encode(text);
-            const chunkData = new Uint8Array(keywordBytes.length + 1 + textBytes.length);
-            chunkData.set(keywordBytes, 0);
-            chunkData[keywordBytes.length] = 0; // null separator
-            chunkData.set(textBytes, keywordBytes.length + 1);
-            
-            // 計算CRC
-            const crc = calculateCRC32([0x74, 0x45, 0x58, 0x74, ...chunkData]); // "tEXt" + data
-            
-            // 組裝tEXt chunk
-            const textChunk = new Uint8Array(12 + chunkData.length);
-            const lengthBytes = [(chunkData.length >>> 24) & 0xFF, (chunkData.length >>> 16) & 0xFF, (chunkData.length >>> 8) & 0xFF, chunkData.length & 0xFF];
-            textChunk.set(lengthBytes, 0);
-            textChunk.set([0x74, 0x45, 0x58, 0x74], 4); // "tEXt"
-            textChunk.set(chunkData, 8);
-            textChunk.set([(crc >>> 24) & 0xFF, (crc >>> 16) & 0xFF, (crc >>> 8) & 0xFF, crc & 0xFF], 8 + chunkData.length);
-            
-            // 重新組裝PNG：簽名 + 原有chunks (除了IEND) + tEXt chunk + IEND
-            const iendChunk = chunks.pop(); // 移除IEND
-            const totalLength = signature.length + chunks.reduce((sum, chunk) => sum + chunk.length, 0) + textChunk.length + iendChunk.length;
-            const result = new Uint8Array(totalLength);
-            
-            let offset = 0;
-            result.set(signature, offset);
-            offset += signature.length;
-            
-            for (const chunk of chunks) {
-                result.set(chunk, offset);
-                offset += chunk.length;
-            }
-            
-            result.set(textChunk, offset);
-            offset += textChunk.length;
-            
-            result.set(iendChunk, offset);
-            
-            return result;
-        }
-
-        function calculateCRC32(data) {
-            const crcTable = [];
-            for (let i = 0; i < 256; i++) {
-                let c = i;
-                for (let j = 0; j < 8; j++) {
-                    if (c & 1) {
-                        c = 0xEDB88320 ^ (c >>> 1);
-                    } else {
-                        c = c >>> 1;
-                    }
-                }
-                crcTable[i] = c;
-            }
-            
-            let crc = 0xFFFFFFFF;
-            for (let i = 0; i < data.length; i++) {
-                crc = crcTable[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8);
-            }
-            return (crc ^ 0xFFFFFFFF) >>> 0;
-        }
-
-        function exportAllVersions(characterId) {
-            const character = characters.find(c => c.id === characterId);
-            if (!character) return;
-
-            character.versions.forEach((version, index) => {
-                setTimeout(() => downloadJSON(character, version), index * 200);
-            });
-        }
-
-        function importCharacter() {
-            document.getElementById('importFile').click();
-        }
-
-        function handleImport(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            if (file.type === 'application/json' || file.name.endsWith('.json')) {
-                // 處理JSON檔案
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const data = JSON.parse(e.target.result);
-                        importCharacterFromData(data);
-                    } catch (error) {
-                        alert('JSON檔案格式錯誤，請確認是有效的角色卡檔案');
-                    }
-                };
-                reader.readAsText(file);
-            } else if (file.type === 'image/png' || file.name.endsWith('.png')) {
-                // 處理PNG檔案
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    try {
-                        const arrayBuffer = e.target.result;
-                        const charaData = extractCharaFromPNG(new Uint8Array(arrayBuffer));
-                        
-                        if (charaData) {
-                            // 解碼Base64
-                            const jsonString = atob(charaData);
-                            const data = JSON.parse(decodeURIComponent(escape(jsonString)));
-                            importCharacterFromData(data, file); // 傳遞原始檔案作為圖片
-                        } else {
-                            alert('PNG檔案中未找到角色資料，請確認這是有效的角色卡PNG檔案');
-                        }
-                    } catch (error) {
-                        alert('PNG檔案讀取失敗：' + error.message);
-                    }
-                };
-                reader.readAsArrayBuffer(file);
-            } else {
-                alert('請選擇JSON或PNG格式的角色卡檔案');
-            }
-        }
-
-        function extractCharaFromPNG(pngData) {
-            // 跳過PNG簽名
-            let pos = 8;
-            
-            while (pos < pngData.length) {
-                // 讀取chunk長度
-                const length = (pngData[pos] << 24) | (pngData[pos + 1] << 16) | (pngData[pos + 2] << 8) | pngData[pos + 3];
-                
-                // 讀取chunk類型
-                const type = String.fromCharCode(pngData[pos + 4], pngData[pos + 5], pngData[pos + 6], pngData[pos + 7]);
-                
-                if (type === 'tEXt') {
-                    // 讀取tEXt chunk的資料
-                    const textData = pngData.slice(pos + 8, pos + 8 + length);
-                    
-                    // 尋找null分隔符
-                    let nullPos = -1;
-                    for (let i = 0; i < textData.length; i++) {
-                        if (textData[i] === 0) {
-                            nullPos = i;
-                            break;
-                        }
-                    }
-                    
-                    if (nullPos !== -1) {
-                        // 提取keyword和text
-                        const keyword = new TextDecoder().decode(textData.slice(0, nullPos));
-                        const text = new TextDecoder().decode(textData.slice(nullPos + 1));
-                        
-                        if (keyword === 'chara') {
-                            return text;
-                        }
-                    }
-                }
-                
-                if (type === 'IEND') break;
-                pos += 12 + length;
-            }
-            
-            return null;
-        }
-
-        function importCharacterFromData(data, imageFile = null) {
-            const character = {
-                id: generateId(),
-                name: data.name || '匯入角色',
-                versions: [{
-                    id: generateId(),
-                    name: '匯入版本',
-                    avatar: '',
-                    creator: data.data?.creator || data.creator || '',
-                    charVersion: data.data?.character_version || data.character_version || '',
-                    creatorNotes: data.data?.creator_notes || data.creatorcomment || '',
-                    tags: Array.isArray(data.tags) ? data.tags.join(', ') : (data.data?.tags ? data.data.tags.join(', ') : ''),
-                    description: data.data?.description || data.description || '',
-                    personality: data.data?.personality || data.personality || '',
-                    scenario: data.data?.scenario || data.scenario || '',
-                    dialogue: data.data?.mes_example || data.mes_example || '',
-                    firstMessage: data.data?.first_mes || data.first_mes || ''
-                }]
-            };
-
-            // 如果是PNG檔案，將圖片設定為頭像
-            if (imageFile) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    character.versions[0].avatar = e.target.result;
-                    finishImport();
-                };
-                reader.readAsDataURL(imageFile);
-            } else {
-                finishImport();
-            }
-
-            function finishImport() {
-                characters.push(character);
-                currentCharacterId = character.id;
-                currentVersionId = character.versions[0].id;
-                renderAll();
-                saveData();
-                alert('角色匯入成功！');
-            }
-        }
-
-        // 初始化應用程式
-        function initApp() {
-            // 載入儲存的自訂顏色，如果沒有則使用預設
-            const savedColors = localStorage.getItem('characterCreatorCustomColors');
-            if (savedColors) {
-                const colors = JSON.parse(savedColors);
-                const root = document.documentElement;
-                root.style.setProperty('--primary-color', colors.primary);
-                root.style.setProperty('--secondary-color', colors.secondary);
-                root.style.setProperty('--accent-color', colors.accent);
-                root.style.setProperty('--bg-color', colors.bg);
-            }
-            // 使用CSS預設值，不需要額外設定
-
-            // 載入角色資料
-            loadData();
-
-            // 如果沒有角色，創建預設角色
-            if (characters.length === 0) {
-                addCharacter();
-            } else {
-                renderAll();
-            }
-
-            // 定期更新統計
-            setInterval(updateTotalStats, 2000);
-
-            // 響應式處理
-            window.addEventListener('resize', function() {
-                if (window.innerWidth > 768) {
-                    document.getElementById('sidebar').classList.remove('show');
-                }
-            });
-        }
-
-        // 啟動應用程式
-        document.addEventListener('DOMContentLoaded', initApp);
-    </script>
-</body>
-</html>
