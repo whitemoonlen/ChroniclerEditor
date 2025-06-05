@@ -183,6 +183,13 @@ body {
     color: var(--primary-color);
 }
 
+.home-filter-bar {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin: 16px 32px;
+    align-items: center;
+}
+
 /* 側邊欄標題區 */
 .sidebar-header {
     padding: var(--padding-xl);

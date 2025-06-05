@@ -101,6 +101,9 @@ let currentWorldBookId = null;
 let currentWorldBookVersionId = null;
 let currentCustomSectionId = null;
 let currentCustomVersionId = null;
+let homeSortKey = 'name';
+let homeSortOrder = 'asc';
+let homeTagFilter = 'all';
 
 // 主題配色 - 日間
 const themes = {
@@ -3764,36 +3767,73 @@ function expandCurrentItemVersions() {
 // 渲染首頁
 function renderHomePage() {
     const container = document.getElementById('contentArea');
+    const allTags = Array.from(new Set(characters.flatMap(c => {
+        const t = c.versions[0].tags || '';
+        return t.split(',').map(s => s.trim()).filter(Boolean);
+    })));
+
+    let list = characters.slice();
+    if (homeTagFilter !== 'all') {
+        list = list.filter(c => {
+            const tags = c.versions[0].tags ? c.versions[0].tags.split(',').map(s => s.trim()) : [];
+            return tags.includes(homeTagFilter);
+        });
+    }
+
+    list.sort((a, b) => {
+        let aVal, bVal;
+        if (homeSortKey === 'name') {
+            aVal = a.name.toLowerCase();
+            bVal = b.name.toLowerCase();
+        } else {
+            aVal = a.versions[0].createdAt || a.createdAt;
+            bVal = b.versions[0].createdAt || b.createdAt;
+        }
+        if (aVal < bVal) return homeSortOrder === 'asc' ? -1 : 1;
+        if (aVal > bVal) return homeSortOrder === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    const cardsHTML = list.map(character => {
+        const firstVersion = character.versions[0];
+        return `
+            <div class="home-card" onclick="selectCharacterFromHome('${character.id}')"
+                 style="cursor: pointer; aspect-ratio: 2 / 3; width: 180px; transition: all 0.2s ease;">
+                <div style="flex: 1 1 auto; width: 100%; height: 280px; aspect-ratio: 2 / 3; border-radius: 5px; overflow: hidden; background: transparent; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);">
+                    ${firstVersion.avatar ? `<img src="${firstVersion.avatar}" style="width: 100%; height: 100%; object-fit: cover;" alt="${character.name}">` : ``}
+                </div>
+                <div style="text-align: center; padding: 0 8px;">
+                    <span style="font-size: 1em; color: var(--text-color); font-weight: 500; line-height: 1.3; display: block;">
+                        ${character.name}
+                    </span>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    const optionsHTML = allTags.map(tag => `<option value="${tag}" ${homeTagFilter===tag?'selected':''}>${tag}</option>`).join('');
+
     container.innerHTML = `
         <div style="padding: 0px;">
-            
-            <!-- 角色卡區塊 -->
+            <div class="home-filter-bar">
+                <select onchange="changeHomeSortKey(this.value)">
+                    <option value="name" ${homeSortKey==='name'?'selected':''}>${t('sortByName')}</option>
+                    <option value="created" ${homeSortKey==='created'?'selected':''}>${t('sortByCreated')}</option>
+                </select>
+                <select onchange="changeHomeSortOrder(this.value)">
+                    <option value="asc" ${homeSortOrder==='asc'?'selected':''}>${t('ascending')}</option>
+                    <option value="desc" ${homeSortOrder==='desc'?'selected':''}>${t('descending')}</option>
+                </select>
+                <select onchange="changeHomeTagFilter(this.value)">
+                    <option value="all" ${homeTagFilter==='all'?'selected':''}>${t('allTags')}</option>
+                    ${optionsHTML}
+                </select>
+            </div>
+
             <div style="padding: 32px; background: transparent; border-radius: 12px;">
                 <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 60px;">
-                    ${characters.map((character, index) => {
-                        const firstVersion = character.versions[0];
-                        return `
-                            <div class="home-card" onclick="selectCharacterFromHome('${character.id}')" 
-                                 style="cursor: pointer; aspect-ratio: 2 / 3; width: 180px; transition: all 0.2s ease;">
-                                <!-- 角色圖片 -->
-                                <div style="flex: 1 1 auto; width: 100%; height: 280px; aspect-ratio: 2 / 3; border-radius: 5px; overflow: hidden; background: transparent; border: 1px solid var(--border-color); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);">
-                                    ${firstVersion.avatar ? 
-                                        `<img src="${firstVersion.avatar}" style="width: 100%; height: 100%; object-fit: cover;" alt="${character.name}">` :
-                                        ``
-                                    }
-                                </div>
-                                <!-- 角色名稱 -->
-                                <div style="text-align: center; padding: 0 8px;">
-                                    <span style="font-size: 1em; color: var(--text-color); font-weight: 500; line-height: 1.3; display: block;">
-                                        ${character.name}
-                                    </span>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                    
-                    <!-- 創建新角色卡片 -->
-                    <div class="home-card" onclick="addCharacterFromHome()" 
+                    ${cardsHTML}
+                    <div class="home-card" onclick="addCharacterFromHome()"
                          style="cursor: pointer; width: 180px; transition: all 0.2s ease;">
                         <div style="width: 100%; height: 280px; border: 2px dashed var(--border-color); border-radius: 12px; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; margin-bottom: 12px;">
                             <div style="color: var(--text-muted); font-size: 3em; margin-bottom: 12px;">+</div>
@@ -3821,6 +3861,21 @@ function renderHomePage() {
             });
         });
     }, 100);
+}
+
+function changeHomeSortKey(value) {
+    homeSortKey = value;
+    renderHomePage();
+}
+
+function changeHomeSortOrder(value) {
+    homeSortOrder = value;
+    renderHomePage();
+}
+
+function changeHomeTagFilter(value) {
+    homeTagFilter = value;
+    renderHomePage();
 }
 
 // 新函數：返回首頁
@@ -4491,6 +4546,15 @@ function updateLanguageUI() {
     const sidebarFooterText = document.querySelector('.sidebar-footer-text');
     if (sidebarFooterText) sidebarFooterText.textContent = t('appSubtitle');
     
+    // 更新頂部控制欄按鈕文字
+    const controlButtons = document.querySelectorAll('.control-btn');
+    if (controlButtons[0]) controlButtons[0].textContent = t('customInterface');
+    if (controlButtons[1]) controlButtons[1].textContent = t('exportData');
+    if (controlButtons[2]) controlButtons[2].textContent = t('importData');
+    if (controlButtons[3]) controlButtons[3].textContent = t('clearAllData');
+    if (controlButtons[4]) controlButtons[4].textContent = t('saveData');
+    if (controlButtons[5]) controlButtons[5].textContent = t('characterOverview');
+
     // 確保按鈕狀態正確顯示
     updateSaveButtonStates();
 }
@@ -5725,6 +5789,7 @@ function updateLanguageUI() {
     if (controlButtons[2]) controlButtons[2].textContent = t('importData');
     if (controlButtons[3]) controlButtons[3].textContent = t('clearAllData');
     if (controlButtons[4]) controlButtons[4].textContent = t('saveData');
+    if (controlButtons[5]) controlButtons[5].textContent = t('characterOverview');
     
     // 確保按鈕狀態正確顯示
     updateSaveButtonStates();

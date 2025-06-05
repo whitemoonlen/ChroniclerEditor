@@ -216,5 +216,11 @@ window.ChroniclerTranslations['en-US'] = {
     
     // Top control bar buttons
     customInterface: 'Custom Interface',
-    saveData: 'Save'
+    saveData: 'Save',
+    characterOverview: 'Character Overview',
+    sortByName: 'Sort by Name',
+    sortByCreated: 'Sort by Created',
+    ascending: 'Ascending',
+    descending: 'Descending',
+    allTags: 'All Tags'
 };
