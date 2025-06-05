@@ -1,0 +1,101 @@
+/* themes.css - 主題配色管理 */
+
+/* 預設主題配色 */
+:root {
+    --primary-color: #4E5E79;
+    --secondary-color: #fafafa;
+    --accent-color: #8b7355;
+    --bg-color: #f3f6f7;
+    --surface-color: #ffffff;
+    --text-color: #2d3748;
+    --text-muted: #718096;
+    --border-color: #e2e8f0;
+    --success-color: #48bb78;
+    --warning-color: #d29053;
+    --danger-color: #f56565;
+    --shadow-light: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
+    --shadow-medium: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    --shadow-large: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    --header-bg: #f1f5f9;
+    --sidebar-bg: #f8fafc;
+    --main-content-bg: #fafbfc;
+    --content-bg: #ffffff;
+}
+
+/* 護眼模式（暗色主題） */
+.theme-eyecare {
+    --primary-color: #404040;
+    --secondary-color: #6e6e6e;
+    --accent-color: #4b768b;
+    --bg-color: #303030;
+    --surface-color: #2a2a2a;
+    --text-color: #e0e0e0;
+    --text-muted: #aaaaaa;
+    --border-color: #525252;
+    --header-bg: #000000;
+    --sidebar-bg: #1f1f1f;
+    --main-content-bg: #1a1a1a;
+    --content-bg: #292929;
+}
+
+/* 暖色調主題 */
+.theme-warm {
+    --primary-color: #744210;
+    --secondary-color: #fef7e6;
+    --accent-color: #d69e2e;
+    --bg-color: #fefcf0;
+    --surface-color: #fffef7;
+    --header-bg: #f7f4e8;
+    --sidebar-bg: #faf8f0;
+    --main-content-bg: #fcfaf5;
+    --content-bg: #fffef9;
+    --border-color: #e2d5a3;
+}
+
+/* 冷色調主題 */
+.theme-cool {
+    --primary-color: #2c5282;
+    --secondary-color: #e6f3ff;
+    --accent-color: #3182ce;
+    --bg-color: #f0f8ff;
+    --header-bg: #ebf8ff;
+    --sidebar-bg: #f7fafc;
+    --main-content-bg: #fafcfe;
+    --border-color: #bee3f8;
+}
+
+/* 森林主題 */
+.theme-forest {
+    --primary-color: #22543d;
+    --secondary-color: #f0fff4;
+    --accent-color: #38a169;
+    --bg-color: #f0fff4;
+    --header-bg: #e6fffa;
+    --sidebar-bg: #f0fff4;
+    --main-content-bg: #f7fffc;
+    --border-color: #9ae6b4;
+}
+
+/* 紫色主題 */
+.theme-purple {
+    --primary-color: #553c9a;
+    --secondary-color: #faf5ff;
+    --accent-color: #9f7aea;
+    --bg-color: #faf5ff;
+    --header-bg: #f7fafc;
+    --sidebar-bg: #faf5ff;
+    --main-content-bg: #fdfdfe;
+    --border-color: #e9d8fd;
+}
+
+/* 極簡主題 */
+.theme-minimal {
+    --primary-color: #4a5568;
+    --secondary-color: #f8f9fa;
+    --accent-color: #718096;
+    --bg-color: #f8f9fa;
+    --header-bg: #f1f3f4;
+    --sidebar-bg: #f8f9fa;
+    --main-content-bg: #fafbfc;
+    --border-color: #e2e8f0;
+}
